@@ -1,0 +1,35 @@
+# STM32CubeIDE Build Files
+Debug/
+Release/
+*.o
+*.d
+*.su
+*.cyclo
+
+# Eclipse/STM32CubeIDE Project Files
+.settings/
+.cproject
+.project
+.mxproject
+
+# Generated Files
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+
+# Temporary Files
+*.tmp
+*.bak
+*~
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# Script Backups
+*.ps1.bak
+
+# Launch Configurations
+*.launch
