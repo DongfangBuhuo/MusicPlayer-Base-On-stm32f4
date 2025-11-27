@@ -26,14 +26,16 @@
 #include "i2s.h"
 #include "sdio.h"
 
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "../Gui/lvgl/lvgl.h"
 #include "../Gui/lvgl_port/lv_port_disp.h"
+#include "../Gui/lvgl_port/lv_port_indev.h"
+#include "../Touch/touch.h"
 #include "es8388.h"
 #include "lcd.h"
 #include <string.h>
+
 
 /* USER CODE END Includes */
 
@@ -133,6 +135,12 @@ int main(void) {
   lcd_init();
   lv_init();
   lv_port_disp_init();
+
+  // Initialize touch screen hardware
+  tp_init();
+
+  // Initialize LVGL input device
+  lv_port_indev_init();
   // LED快闪3次表示开始初始化
   for (int i = 0; i < 3; i++) {
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
@@ -264,8 +272,11 @@ int main(void) {
     /* USER CODE BEGIN 3 */
     // LED慢速闪烁表示正在播放
     lv_timer_handler();
-    if (isPlaying) {
-      HAL_Delay(1000);
+    HAL_Delay(5);
+
+    static uint32_t led_timer = 0;
+    if (isPlaying && (HAL_GetTick() - led_timer > 1000)) {
+      led_timer = HAL_GetTick();
       HAL_GPIO_TogglePin(GPIOF, GPIO_PIN_9);
     }
   }

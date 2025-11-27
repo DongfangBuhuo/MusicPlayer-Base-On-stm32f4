@@ -1,98 +1,91 @@
 /**
  ****************************************************************************************************
  * @file        ft5206.h
- * @author      ÕıµãÔ­×ÓÍÅ¶Ó(ALIENTEK)
+ * @author      æ­£ç‚¹åŸå­å›¢é˜Ÿ(ALIENTEK)
  * @version     V1.1
  * @date        2023-05-29
- * @brief       7´çµçÈİ´¥ÃşÆÁ-FT5206/FT5426 Çı¶¯´úÂë
- * @license     Copyright (c) 2020-2032, ¹ãÖİÊĞĞÇÒíµç×Ó¿Æ¼¼ÓĞÏŞ¹«Ë¾
+ * @brief       7å¯¸ç”µå®¹è§¦æ‘¸å±-FT5206/FT5426 é©±åŠ¨ä»£ç 
+ * @license     Copyright (c) 2020-2032, å¹¿å·å¸‚æ˜Ÿç¿¼ç”µå­ç§‘æŠ€æœ‰é™å…¬å¸
  ****************************************************************************************************
  * @attention
  *
- * ÊµÑéÆ½Ì¨:ÕıµãÔ­×Ó Ì½Ë÷Õß F407¿ª·¢°å
- * ÔÚÏßÊÓÆµ:www.yuanzige.com
- * ¼¼ÊõÂÛÌ³:www.openedv.com
- * ¹«Ë¾ÍøÖ·:www.alientek.com
- * ¹ºÂòµØÖ·:openedv.taobao.com
+ * å®éªŒå¹³å°:æ­£ç‚¹åŸå­ æ¢ç´¢è€… F407å¼€å‘æ¿
+ * åœ¨çº¿è§†é¢‘:www.yuanzige.com
+ * æŠ€æœ¯è®ºå›:www.openedv.com
+ * å…¬å¸ç½‘å€:www.alientek.com
+ * è´­ä¹°åœ°å€:openedv.taobao.com
  *
- * ĞŞ¸ÄËµÃ÷
+ * ä¿®æ”¹è¯´æ˜
  * V1.0 20211025
- * µÚÒ»´Î·¢²¼
+ * ç¬¬ä¸€æ¬¡å‘å¸ƒ
  * V1.1 20230529
- * ¼æÈİ7´ç CST340´¥ÃşÆÁ
+ * å…¼å®¹7å¯¸ CST340è§¦æ‘¸å±
  ****************************************************************************************************
  */
- 
+
 #ifndef __FT5206_H
 #define __FT5206_H
 
-#include "./SYSTEM/sys/sys.h"
+#include <stdint.h>
 
-
-/******************************************************************************************/
-/* FT5206 INT ºÍ RST Òı½Å ¶¨Òå */
-
-#define FT5206_RST_GPIO_PORT            GPIOC
-#define FT5206_RST_GPIO_PIN             GPIO_PIN_13
-#define FT5206_RST_GPIO_CLK_ENABLE()    do{ __HAL_RCC_GPIOC_CLK_ENABLE(); }while(0)   /* PC¿ÚÊ±ÖÓÊ¹ÄÜ */
-
-#define FT5206_INT_GPIO_PORT            GPIOB
-#define FT5206_INT_GPIO_PIN             GPIO_PIN_1
-#define FT5206_INT_GPIO_CLK_ENABLE()    do{ __HAL_RCC_GPIOB_CLK_ENABLE(); }while(0)   /* PB¿ÚÊ±ÖÓÊ¹ÄÜ */
+#include "main.h"
 
 /******************************************************************************************/
+/* FT5206 INT å’Œ RST å¼•è„š å®šä¹‰ */
 
-/* ÓëµçÈİ´¥ÃşÆÁÁ¬½ÓµÄĞ¾Æ¬Òı½Å(Î´°üº¬IICÒı½Å) 
- * IO²Ù×÷º¯Êı 
+#define FT5206_RST_GPIO_PORT GPIOC
+#define FT5206_RST_GPIO_PIN GPIO_PIN_13
+#define FT5206_RST_GPIO_CLK_ENABLE()                                           \
+  do {                                                                         \
+    __HAL_RCC_GPIOC_CLK_ENABLE();                                              \
+  } while (0) /* PCå£æ—¶é’Ÿä½¿èƒ½ */
+
+#define FT5206_INT_GPIO_PORT GPIOB
+#define FT5206_INT_GPIO_PIN GPIO_PIN_1
+#define FT5206_INT_GPIO_CLK_ENABLE()                                           \
+  do {                                                                         \
+    __HAL_RCC_GPIOB_CLK_ENABLE();                                              \
+  } while (0) /* PBå£æ—¶é’Ÿä½¿èƒ½ */
+
+/******************************************************************************************/
+
+/* ä¸ç”µå®¹è§¦æ‘¸å±è¿æ¥çš„èŠ¯ç‰‡å¼•è„š(æœªåŒ…å«IICå¼•è„š)
+ * IOæ“ä½œå‡½æ•°
  */
-#define FT5206_RST(x)     do{ x ? \
-                              HAL_GPIO_WritePin(FT5206_RST_GPIO_PORT, FT5206_RST_GPIO_PIN, GPIO_PIN_SET) : \
-                              HAL_GPIO_WritePin(FT5206_RST_GPIO_PORT, FT5206_RST_GPIO_PIN, GPIO_PIN_RESET); \
-                          }while(0)       /* ¸´Î»Òı½Å */
+#define FT5206_RST(x)                                                          \
+  do {                                                                         \
+    x ? HAL_GPIO_WritePin(FT5206_RST_GPIO_PORT, FT5206_RST_GPIO_PIN,           \
+                          GPIO_PIN_SET)                                        \
+      : HAL_GPIO_WritePin(FT5206_RST_GPIO_PORT, FT5206_RST_GPIO_PIN,           \
+                          GPIO_PIN_RESET);                                     \
+  } while (0) /* å¤ä½å¼•è„š */
 
-#define FT5206_INT        HAL_GPIO_ReadPin(FT5206_INT_GPIO_PORT, FT5206_INT_GPIO_PIN)     /* ¶ÁÈ¡×öµÄÒı½Å */
+#define FT5206_INT                                                                  \
+  HAL_GPIO_ReadPin(FT5206_INT_GPIO_PORT, FT5206_INT_GPIO_PIN) /* è¯»å–åšçš„å¼•è„š \
+                                                               */
 
-/* IIC¶ÁĞ´ÃüÁî */
-#define FT5206_CMD_WR               0X70        /* Ğ´ÃüÁî(×îµÍÎ»Îª0) */
-#define FT5206_CMD_RD               0X71        /* ¶ÁÃüÁî(×îµÍÎ»Îª1) */
+/* IICè¯»å†™å‘½ä»¤ */
+#define FT5206_CMD_WR 0X70 /* å†™å‘½ä»¤(æœ€ä½ä½ä¸º0) */
+#define FT5206_CMD_RD 0X71 /* è¯»å‘½ä»¤(æœ€ä½ä½ä¸º1) */
 
-/* FT5206 ²¿·Ö¼Ä´æÆ÷¶¨Òå  */
-#define FT5206_DEVIDE_MODE          0x00        /* FT5206Ä£Ê½¿ØÖÆ¼Ä´æÆ÷ */
-#define FT5206_REG_NUM_FINGER       0x02        /* ´¥Ãş×´Ì¬¼Ä´æÆ÷ */
+/* FT5206 éƒ¨åˆ†å¯„å­˜å™¨å®šä¹‰  */
+#define FT5206_DEVIDE_MODE 0x00    /* FT5206æ¨¡å¼æ§åˆ¶å¯„å­˜å™¨ */
+#define FT5206_REG_NUM_FINGER 0x02 /* è§¦æ‘¸çŠ¶æ€å¯„å­˜å™¨ */
 
-#define FT5206_TP1_REG              0X03        /* µÚÒ»¸ö´¥ÃşµãÊı¾İµØÖ· */
-#define FT5206_TP2_REG              0X09        /* µÚ¶ş¸ö´¥ÃşµãÊı¾İµØÖ· */
-#define FT5206_TP3_REG              0X0F        /* µÚÈı¸ö´¥ÃşµãÊı¾İµØÖ· */
-#define FT5206_TP4_REG              0X15        /* µÚËÄ¸ö´¥ÃşµãÊı¾İµØÖ· */
-#define FT5206_TP5_REG              0X1B        /* µÚÎå¸ö´¥ÃşµãÊı¾İµØÖ· */ 
+#define FT5206_TP1_REG 0X03 /* ç¬¬ä¸€ä¸ªè§¦æ‘¸ç‚¹æ•°æ®åœ°å€ */
+#define FT5206_TP2_REG 0X09 /* ç¬¬äºŒä¸ªè§¦æ‘¸ç‚¹æ•°æ®åœ°å€ */
+#define FT5206_TP3_REG 0X0F /* ç¬¬ä¸‰ä¸ªè§¦æ‘¸ç‚¹æ•°æ®åœ°å€ */
+#define FT5206_TP4_REG 0X15 /* ç¬¬å››ä¸ªè§¦æ‘¸ç‚¹æ•°æ®åœ°å€ */
+#define FT5206_TP5_REG 0X1B /* ç¬¬äº”ä¸ªè§¦æ‘¸ç‚¹æ•°æ®åœ°å€ */
 
+#define FT5206_ID_G_LIB_VERSION 0xA1  /* ç‰ˆæœ¬ */
+#define FT5206_ID_G_MODE 0xA4         /* FT5206ä¸­æ–­æ¨¡å¼æ§åˆ¶å¯„å­˜å™¨ */
+#define FT5206_ID_G_THGROUP 0x80      /* è§¦æ‘¸æœ‰æ•ˆå€¼è®¾ç½®å¯„å­˜å™¨ */
+#define FT5206_ID_G_PERIODACTIVE 0x88 /* æ¿€æ´»çŠ¶æ€å‘¨æœŸè®¾ç½®å¯„å­˜å™¨ */
 
-#define	FT5206_ID_G_LIB_VERSION     0xA1        /* °æ±¾ */
-#define FT5206_ID_G_MODE            0xA4        /* FT5206ÖĞ¶ÏÄ£Ê½¿ØÖÆ¼Ä´æÆ÷ */
-#define FT5206_ID_G_THGROUP         0x80        /* ´¥ÃşÓĞĞ§ÖµÉèÖÃ¼Ä´æÆ÷ */
-#define FT5206_ID_G_PERIODACTIVE    0x88        /* ¼¤»î×´Ì¬ÖÜÆÚÉèÖÃ¼Ä´æÆ÷ */
-
-
-uint8_t ft5206_wr_reg(uint16_t reg,uint8_t *buf,uint8_t len);
-void ft5206_rd_reg(uint16_t reg,uint8_t *buf,uint8_t len);
+uint8_t ft5206_wr_reg(uint16_t reg, uint8_t *buf, uint8_t len);
+void ft5206_rd_reg(uint16_t reg, uint8_t *buf, uint8_t len);
 uint8_t ft5206_init(void);
 uint8_t ft5206_scan(uint8_t mode);
 
 #endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
