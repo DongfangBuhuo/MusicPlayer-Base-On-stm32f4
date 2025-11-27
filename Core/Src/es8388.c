@@ -70,8 +70,8 @@ uint8_t ES8388_Init(I2C_HandleTypeDef *hi2c)
 	ES8388_Write_Reg(0x2A, 0x80); // 只启用到ROUT1的路径
 
 	/* 9. 输出音量设置 */
-	ES8388_Write_Reg(0x2E, 0x1E); // LOUT1音量 (左耳机) 28/33
-	ES8388_Write_Reg(0x2F, 0x1E); // ROUT1音量 (右耳机) 28/33
+	ES8388_Write_Reg(0x2E, 0x0F); // LOUT1音量 (左耳机) 28/33
+	ES8388_Write_Reg(0x2F, 0x0F); // ROUT1音量 (右耳机) 28/33
 	ES8388_Write_Reg(0x30, 0x00); // LOUT2音量设为0 (左喇叭静音)
 	ES8388_Write_Reg(0x31, 0x00); // ROUT2音量设为0 (右喇叭静音)
 
@@ -135,7 +135,7 @@ void ES8388_SetSpeakerEnable(uint8_t enable)
         ES8388_Write_Reg(0x31, 0x1C); // ROUT2音量
     } else {
         // 禁用喇叭输出，只保留耳机
-        ES8388_Write_Reg(0x04, 0x0C); // 只启用LOUT1/ROUT1
+        ES8388_Write_Reg(0x04, 0x30); // 只启用LOUT1/ROUT1
         ES8388_Write_Reg(0x27, 0x80); // 只路由到LOUT1
         ES8388_Write_Reg(0x2A, 0x80); // 只路由到ROUT1
         ES8388_Write_Reg(0x28, 0x00); // 关闭LOUT2混音器
