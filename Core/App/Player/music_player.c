@@ -32,7 +32,7 @@ static uint16_t audio_buffer[AUDIO_BUFFER_SIZE];
 static FATFS fs;
 static FIL wavFile;
 static WAV_Header_TypeDef wavHeader;
-static uint8_t isPlaying = 0;
+uint8_t isPlaying;
 
 /* External variables --------------------------------------------------------*/
 extern I2S_HandleTypeDef hi2s2;
@@ -40,7 +40,7 @@ extern I2C_HandleTypeDef hi2c1;
 
 void music_player_init(void) {
   FRESULT res;
-
+  isPlaying =0;
   // 初始化ES8388
   if (ES8388_Init(&hi2c1) != 0) {
     // LED常亮表示ES8388初始化失败
@@ -81,8 +81,10 @@ void music_player_play(const char *filename) {
   FRESULT res;
   UINT bytesRead;
 
+  char music_full_name[40] = "0:/music/";
   // 打开WAV文件
-  res = f_open(&wavFile, filename, FA_READ);
+  strcat(music_full_name,filename);
+  res = f_open(&wavFile, music_full_name, FA_READ);
   if (res != FR_OK) {
     // LED快速闪烁表示文件打开失败
     while (1) {
