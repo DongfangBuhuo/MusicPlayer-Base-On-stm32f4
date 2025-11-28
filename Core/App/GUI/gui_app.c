@@ -1,6 +1,6 @@
 #include "gui_app.h"
 
-#include "../../GUI/lvgl/lvgl.h"
+#include "../../Gui/lvgl/lvgl.h"
 
 void gui_app_init(void) {
   /* LVGL Test Code */
