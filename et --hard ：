@@ -1,0 +1,17 @@
+[33mcommit 330272b50dcad3eef7ea5edfac1ad75e43ce0541[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: DongfangBuhuo <2297158864@qq.com>
+Date:   Fri Nov 28 11:14:36 2025 +0800
+
+    计划蓝图
+
+[33mcommit a76efbd3698e1a5e924d36960e0a7fd7218e2f64[m
+Author: DongfangBuhuo <2297158864@qq.com>
+Date:   Thu Nov 27 18:58:02 2025 +0800
+
+    添加了触屏驱动，并进行了兼容，融入了lvgl
+
+[33mcommit 7b010e86e17bc3582373dc696bd2d1e8d88b5fea[m
+Author: DongfangBuhuo <2297158864@qq.com>
+Date:   Thu Nov 27 17:37:04 2025 +0800
+
+    移植了lvgl并设置为竖屏
