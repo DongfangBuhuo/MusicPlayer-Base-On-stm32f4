@@ -144,9 +144,10 @@ static void disp_flush(lv_display_t *disp_drv, const lv_area_t *area,
     uint32_t len = width * height;
 
     /* Burst write to LCD RAM */
-    while (len--) {
-      LCD->LCD_RAM = *color_p++;
-    }
+	while (len--)
+	{
+		LCD->LCD_RAM = *color_p++;
+	}
   }
 
   /*IMPORTANT!!!
