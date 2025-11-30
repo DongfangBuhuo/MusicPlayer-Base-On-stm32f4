@@ -1,6 +1,6 @@
 #include "gui_music_player.h"
 #include "gui_app.h"
-
+#include "../Player/music_player.h"
 // 强制启用并包含中文字体
 #define LV_FONT_SOURCE_HAN_SANS_SC_14_CJK 1
 #include "../../Gui/lvgl/src/font/lv_font_source_han_sans_sc_14_cjk.c"
@@ -24,7 +24,7 @@ static bool is_playing = false;
 static int32_t current_cover_angle = 0;
 
 // 音量变量 (0-100)
-static int32_t vol_speaker = 50;
+static int32_t vol_speaker = 0;
 static int32_t vol_headphone = 50;
 
 // 封面旋转动画回调函数
@@ -84,8 +84,19 @@ static void vol_slider_cb(lv_event_t *e)
     lv_obj_t *slider = lv_event_get_target(e);
     int32_t *val_ptr = (int32_t *)lv_event_get_user_data(e);
     *val_ptr = lv_slider_get_value(slider);
-    // 调用底层音量设置
 
+    // 映射 0-100 到 0-33
+    uint8_t hw_volume = (uint8_t)(*val_ptr * 33 / 100);
+
+    // 调用底层音量设置
+    if (val_ptr == &vol_speaker)
+    {
+        music_player_set_speaker_volume(hw_volume);
+    }
+    else if (val_ptr == &vol_headphone)
+    {
+        music_player_set_headphone_volume(hw_volume);
+    }
 }
 
 // 设置按钮回调：显示弹窗
