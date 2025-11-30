@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cmsis_os.h"
+
 /* Private typedef -----------------------------------------------------------*/
 typedef struct {
   char ChunkID[4]; // "RIFF"
@@ -33,14 +35,21 @@ static FATFS fs;
 static FIL wavFile;
 static WAV_Header_TypeDef wavHeader;
 uint8_t isPlaying;
+osSemaphoreId_t audio_semHandle;
+volatile uint8_t audio_state = 0;
 
 /* External variables --------------------------------------------------------*/
 extern I2S_HandleTypeDef hi2s2;
 extern I2C_HandleTypeDef hi2c1;
-
+//
 void music_player_init(void) {
   FRESULT res;
-  isPlaying =0;
+  isPlaying = 0;
+
+  // Create binary semaphore
+  const osSemaphoreAttr_t audio_sem_attributes = {.name = "audio_sem"};
+  audio_semHandle = osSemaphoreNew(1, 0, &audio_sem_attributes);
+
   // 初始化ES8388
   if (ES8388_Init(&hi2c1) != 0) {
     // LED常亮表示ES8388初始化失败
@@ -49,7 +58,7 @@ void music_player_init(void) {
       ;
   }
 
-  // 明确关闭喇叭输出，只使用耳机
+  // 明确开启喇叭输出
   ES8388_SetSpeakerEnable(0);
 
   // LED闪1次表示ES8388初始化成功
@@ -83,7 +92,7 @@ void music_player_play(const char *filename) {
 
   char music_full_name[40] = "0:/music/";
   // 打开WAV文件
-  strcat(music_full_name,filename);
+  strcat(music_full_name, filename);
   res = f_open(&wavFile, music_full_name, FA_READ);
   if (res != FR_OK) {
     // LED快速闪烁表示文件打开失败
@@ -167,23 +176,15 @@ void music_player_process(void) {
  * @param  hi2s: I2S handle
  * @retval None
  */
+/**
+ * @brief  Tx Transfer Half completed callback
+ * @param  hi2s: I2S handle
+ * @retval None
+ */
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s) {
   if (hi2s->Instance == SPI2) {
-    UINT bytesRead;
-    // 填充缓冲区的前半部分
-    f_read(&wavFile, &audio_buffer[0], AUDIO_BUFFER_SIZE, &bytesRead);
-
-    if (bytesRead < AUDIO_BUFFER_SIZE) {
-      // 播放结束或循环播放
-      // 这里简单实现循环播放：回到数据区开始
-      // 注意：这里需要知道数据区的偏移，简单起见重新打开或seek
-      // 为了演示，我们填充0
-      memset(&audio_buffer[0], 0, AUDIO_BUFFER_SIZE - bytesRead);
-      // 如果完全读完了，seek回开头（这里简化处理，实际应该解析wav头找到data位置）
-      if (bytesRead == 0) {
-        f_lseek(&wavFile, sizeof(WAV_Header_TypeDef));
-      }
-    }
+    audio_state = 1; // Fill first half
+    osSemaphoreRelease(audio_semHandle);
   }
 }
 
@@ -194,22 +195,39 @@ void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s) {
  */
 void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s) {
   if (hi2s->Instance == SPI2) {
-    UINT bytesRead;
-    // 填充缓冲区的后半部分
-    // 注意：audio_buffer是uint16_t数组，AUDIO_BUFFER_SIZE是元素个数
-    // 缓冲区总大小是 AUDIO_BUFFER_SIZE * 2 字节
-    // 前半部分是 0 到 AUDIO_BUFFER_SIZE/2 - 1
-    // 后半部分是 AUDIO_BUFFER_SIZE/2 到 AUDIO_BUFFER_SIZE - 1
-    // 每次填充一半，即 AUDIO_BUFFER_SIZE/2 个元素，即 AUDIO_BUFFER_SIZE 字节
+    audio_state = 2; // Fill second half
+    osSemaphoreRelease(audio_semHandle);
+  }
+}
 
-    f_read(&wavFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE,
-           &bytesRead);
+void music_player_task(void) {
+  UINT bytesRead;
 
-    if (bytesRead < AUDIO_BUFFER_SIZE) {
-      memset(&audio_buffer[AUDIO_BUFFER_SIZE / 2], 0,
-             AUDIO_BUFFER_SIZE - bytesRead);
-      if (bytesRead == 0) {
-        f_lseek(&wavFile, sizeof(WAV_Header_TypeDef));
+  // 等待信号量初始化，防止高优先级任务饿死低优先级初始化任务
+  while (audio_semHandle == NULL) {
+    osDelay(10);
+  }
+
+  for (;;) {
+    if (osSemaphoreAcquire(audio_semHandle, osWaitForever) == osOK) {
+      if (audio_state == 1) {
+        // Fill first half
+        f_read(&wavFile, &audio_buffer[0], AUDIO_BUFFER_SIZE, &bytesRead);
+        if (bytesRead < AUDIO_BUFFER_SIZE) {
+          memset(&audio_buffer[0], 0, AUDIO_BUFFER_SIZE - bytesRead);
+          if (bytesRead == 0)
+            f_lseek(&wavFile, sizeof(WAV_Header_TypeDef));
+        }
+      } else if (audio_state == 2) {
+        // Fill second half
+        f_read(&wavFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2],
+               AUDIO_BUFFER_SIZE, &bytesRead);
+        if (bytesRead < AUDIO_BUFFER_SIZE) {
+          memset(&audio_buffer[AUDIO_BUFFER_SIZE / 2], 0,
+                 AUDIO_BUFFER_SIZE - bytesRead);
+          if (bytesRead == 0)
+            f_lseek(&wavFile, sizeof(WAV_Header_TypeDef));
+        }
       }
     }
   }

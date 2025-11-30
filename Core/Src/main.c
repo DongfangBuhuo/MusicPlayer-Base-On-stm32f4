@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 #include "dma.h"
 #include "fatfs.h"
 #include "i2c.h"
@@ -29,21 +30,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "../Gui/lvgl/lvgl.h"
-#include "../Gui/lvgl_port/lv_port_disp.h"
-#include "../Gui/lvgl_port/lv_port_indev.h"
-#include "../Touch/touch.h"
-#include "es8388.h"
-#include "lcd.h"
-#include "../APP/Player/music_player.h"
-#include <string.h>
-
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
 
 /* USER CODE END PTD */
 
@@ -60,11 +51,12 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+extern TIM_HandleTypeDef htim6, htim7;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -111,30 +103,26 @@ int main(void)
   MX_FSMC_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(100); // 等待电源稳定
-  lcd_init();
-  lv_init();
-  lv_port_disp_init();
-
-  // Initialize touch screen hardware
-  tp_init();
-
-  // Initialize LVGL input device
-  lv_port_indev_init();
-
-  music_player_init();
-  gui_app_init();
-
-  music_player_play("1.wav");
-  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_TIM_Base_Start_IT(&htim7); // 必须先启动 TIM7，否则 HAL_Delay 会卡死
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* Call init function for freertos objects (in cmsis_os2.c) */
+  MX_FREERTOS_Init();
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1) {
     /* USER CODE END WHILE */
 
-
+    /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
 }
@@ -185,15 +173,27 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    // 判断是否是 TIM6 触发的中断
-    if (htim->Instance == TIM6) {
-        lv_tick_inc(1); // 告诉 LVGL 过去了 1ms
-    }
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+  // 判断是否是 TIM6 触发的中断
+  if (htim->Instance == TIM6) {
+    lv_tick_inc(1); // 告诉 LVGL 过去了 1ms
+  }
+  // 判断是否是 TIM7 触发的中断（HAL 系统时基）
+  if (htim->Instance == TIM7) {
+    HAL_IncTick(); // 递增 HAL 系统 tick
+  }
 }
 
 /* USER CODE END 4 */
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM7 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
 
 /**
   * @brief  This function is executed in case of error occurrence.
