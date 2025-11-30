@@ -153,12 +153,6 @@ void StartDefaultTask(void *argument)
 		lv_task_handler(); // Handle LVGL tasks
 		osDelay(5);        // Delay 5ms
 	}
-	/* Infinite loop */
-	for (;;)
-	{
-		lv_task_handler(); // Handle LVGL tasks
-		osDelay(5);        // Delay 5ms
-	}
   /* USER CODE END StartDefaultTask */
 }
 

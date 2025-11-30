@@ -10,24 +10,25 @@
 #include "cmsis_os.h"
 
 /* Private typedef -----------------------------------------------------------*/
-typedef struct {
-  char ChunkID[4]; // "RIFF"
-  uint32_t ChunkSize;
-  char Format[4];      // "WAVE"
-  char Subchunk1ID[4]; // "fmt "
-  uint32_t Subchunk1Size;
-  uint16_t AudioFormat;
-  uint16_t NumChannels;
-  uint32_t SampleRate;
-  uint32_t ByteRate;
-  uint16_t BlockAlign;
-  uint16_t BitsPerSample;
-  char Subchunk2ID[4]; // "data"
-  uint32_t Subchunk2Size;
+typedef struct
+{
+	char ChunkID[4];  // "RIFF"
+	uint32_t ChunkSize;
+	char Format[4];       // "WAVE"
+	char Subchunk1ID[4];  // "fmt "
+	uint32_t Subchunk1Size;
+	uint16_t AudioFormat;
+	uint16_t NumChannels;
+	uint32_t SampleRate;
+	uint32_t ByteRate;
+	uint16_t BlockAlign;
+	uint16_t BitsPerSample;
+	char Subchunk2ID[4];  // "data"
+	uint32_t Subchunk2Size;
 } WAV_Header_TypeDef;
 
 /* Private define ------------------------------------------------------------*/
-#define AUDIO_BUFFER_SIZE 4096 // 4KB 缓存
+#define AUDIO_BUFFER_SIZE 4096  // 4KB 缓存
 
 /* Private variables ---------------------------------------------------------*/
 static uint16_t audio_buffer[AUDIO_BUFFER_SIZE];
@@ -42,193 +43,181 @@ volatile uint8_t audio_state = 0;
 extern I2S_HandleTypeDef hi2s2;
 extern I2C_HandleTypeDef hi2c1;
 //
-void music_player_init(void) {
-  FRESULT res;
-  isPlaying = 0;
+void music_player_init(void)
+{
+	FRESULT res;
+	isPlaying = 0;
 
-  // Create binary semaphore
-  const osSemaphoreAttr_t audio_sem_attributes = {.name = "audio_sem"};
-  audio_semHandle = osSemaphoreNew(1, 0, &audio_sem_attributes);
+	// Create binary semaphore
+	const osSemaphoreAttr_t audio_sem_attributes =
+	{ .name = "audio_sem" };
+	audio_semHandle = osSemaphoreNew(1, 0, &audio_sem_attributes);
 
-  // 初始化ES8388
-  if (ES8388_Init(&hi2c1) != 0) {
-    // LED常亮表示ES8388初始化失败
-    HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
-    while (1)
-      ;
-  }
+	// 初始化ES8388
+	if (ES8388_Init(&hi2c1) != 0)
+	{
+		// LED常亮表示ES8388初始化失败
+		HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
+		while (1)
+			;
+	}
 
-  // 明确开启喇叭输出
-  ES8388_SetSpeakerEnable(0);
+	// 明确开启喇叭输出
+	ES8388_SetSpeakerEnable(0);
 
-  // LED闪1次表示ES8388初始化成功
-  HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
-  HAL_Delay(300);
-  HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_RESET);
-  HAL_Delay(300);
+	// LED闪1次表示ES8388初始化成功
+	HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
+	HAL_Delay(300);
+	HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_RESET);
+	HAL_Delay(300);
 
-  // 挂载SD卡
-  res = f_mount(&fs, "0:/", 1);
-  if (res != FR_OK) {
-    // LED慢闪表示SD卡挂载失败
-    while (1) {
-      HAL_GPIO_TogglePin(GPIOF, GPIO_PIN_9);
-      HAL_Delay(500);
-    }
-  }
+	// 挂载SD卡
+	res = f_mount(&fs, "0:/", 1);
+	if (res != FR_OK)
+	{
+		// LED慢闪表示SD卡挂载失败
+		while (1)
+		{
+			HAL_GPIO_TogglePin(GPIOF, GPIO_PIN_9);
+			HAL_Delay(500);
+		}
+	}
 
-  // LED闪2次表示SD卡挂载成功
-  for (int i = 0; i < 2; i++) {
-    HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
-    HAL_Delay(200);
-    HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_RESET);
-    HAL_Delay(200);
-  }
+	// LED闪2次表示SD卡挂载成功
+	for (int i = 0; i < 2; i++)
+	{
+		HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
+		HAL_Delay(200);
+		HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_RESET);
+		HAL_Delay(200);
+	}
 }
 
-void music_player_play(const char *filename) {
-  FRESULT res;
-  UINT bytesRead;
+void music_player_play(const char *filename)
+{
+	FRESULT res;
+	UINT bytesRead;
 
-  char music_full_name[40] = "0:/music/";
-  // 打开WAV文件
-  strcat(music_full_name, filename);
-  res = f_open(&wavFile, music_full_name, FA_READ);
-  if (res != FR_OK) {
-    // LED快速闪烁表示文件打开失败
-    while (1) {
-      HAL_GPIO_TogglePin(GPIOF, GPIO_PIN_9);
-      HAL_Delay(100);
-    }
-  }
+	char music_full_name[40] = "0:/music/";
+	// 打开WAV文件
+	strcat(music_full_name, filename);
+	res = f_open(&wavFile, music_full_name, FA_READ);
+	if (res != FR_OK)
+	{
+		// LED快速闪烁表示文件打开失败
+		while (1)
+		{
+			HAL_GPIO_TogglePin(GPIOF, GPIO_PIN_9);
+			HAL_Delay(100);
+		}
+	}
 
-  // 读取WAV头
-  f_read(&wavFile, &wavHeader, sizeof(wavHeader), &bytesRead);
+	// 读取WAV头
+	res = f_read(&wavFile, &wavHeader, sizeof(wavHeader), &bytesRead);
+	if (res != FR_OK || bytesRead != sizeof(wavHeader))
+	{
+		// 读取头失败
+		f_close(&wavFile);
+		return;
+	}
 
-  // 简单检查是否为 WAV 格式
-  if (strncmp(wavHeader.ChunkID, "RIFF", 4) == 0 &&
-      strncmp(wavHeader.Format, "WAVE", 4) == 0) {
+	// 检查是否为WAV文件
+	if (strncmp(wavHeader.ChunkID, "RIFF", 4) != 0
+			|| strncmp(wavHeader.Format, "WAVE", 4) != 0)
+	{
+		// 不是WAV文件
+		f_close(&wavFile);
+		return;
+	}
 
-    // 根据WAV文件的采样率重新配置I2S
-    uint32_t sampleRate = wavHeader.SampleRate;
+	// 配置I2S采样率
+	hi2s2.Init.AudioFreq = wavHeader.SampleRate;
+	if (HAL_I2S_Init(&hi2s2) != HAL_OK)
+	{
+		// I2S初始化失败
+		f_close(&wavFile);
+		return;
+	}
 
-    // 停止I2S（如果正在运行）
-    HAL_I2S_DMAStop(&hi2s2);
+	// 填充初始缓存
+	f_read(&wavFile, audio_buffer, AUDIO_BUFFER_SIZE * 2, &bytesRead);
 
-    // 根据采样率重新初始化I2S
-    if (sampleRate == 8000) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_8K;
-    } else if (sampleRate == 11025) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_11K;
-    } else if (sampleRate == 16000) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_16K;
-    } else if (sampleRate == 22050) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_22K;
-    } else if (sampleRate == 32000) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_32K;
-    } else if (sampleRate == 44100) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_44K;
-    } else if (sampleRate == 48000) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_48K;
-    } else if (sampleRate == 96000) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_96K;
-    } else if (sampleRate == 192000) {
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_192K;
-    } else {
-      // 不支持的采样率，默认使用44.1kHz
-      hi2s2.Init.AudioFreq = I2S_AUDIOFREQ_44K;
-    }
+	// 启动I2S DMA传输
+	HAL_I2S_Transmit_DMA(&hi2s2, audio_buffer, AUDIO_BUFFER_SIZE);
 
-    // 重新初始化I2S
-    HAL_I2S_Init(&hi2s2);
+	isPlaying = 1;
 
-    // 读取第一块音频数据
-    f_read(&wavFile, audio_buffer, AUDIO_BUFFER_SIZE * 2, &bytesRead);
+	// 播放循环
+	while (isPlaying)
+	{
+		// 等待半传输或传输完成中断信号
+		if (osSemaphoreAcquire(audio_semHandle, osWaitForever) == osOK)
+		{
+			if (audio_state == 1)  // 半传输完成，填充前半部分
+			{
+				f_read(&wavFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
+			}
+			else if (audio_state == 2)  // 传输完成，填充后半部分
+			{
+				f_read(&wavFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2],
+						AUDIO_BUFFER_SIZE, &bytesRead);
+			}
 
-    // LED关闭表示准备播放
-    HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_RESET);
-    HAL_Delay(500);
+			if (bytesRead < AUDIO_BUFFER_SIZE)
+			{
+				// 文件结束，重新播放或停止
+				// f_lseek(&wavFile, sizeof(wavHeader)); // 循环播放
+				// 或者停止
+				isPlaying = 0;
+				break;
+			}
+		}
+	}
 
-    // 启动 DMA 循环传输
-    HAL_I2S_Transmit_DMA(&hi2s2, audio_buffer, AUDIO_BUFFER_SIZE);
-
-    isPlaying = 1;
-  } else {
-    // 文件格式错误，LED持续快闪
-    f_close(&wavFile);
-    while (1) {
-      HAL_GPIO_TogglePin(GPIOF, GPIO_PIN_9);
-      HAL_Delay(50);
-    }
-  }
+	// 停止传输
+	HAL_I2S_DMAStop(&hi2s2);
+	f_close(&wavFile);
 }
 
-void music_player_process(void) {
-  static uint32_t led_timer = 0;
-  if (isPlaying && (HAL_GetTick() - led_timer > 1000)) {
-    led_timer = HAL_GetTick();
-    HAL_GPIO_TogglePin(GPIOF, GPIO_PIN_9);
-  }
-}
+void music_player_task(void)
+{
+	UINT bytesRead;
 
-/**
- * @brief  Tx Transfer Half completed callback
- * @param  hi2s: I2S handle
- * @retval None
- */
-/**
- * @brief  Tx Transfer Half completed callback
- * @param  hi2s: I2S handle
- * @retval None
- */
-void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s) {
-  if (hi2s->Instance == SPI2) {
-    audio_state = 1; // Fill first half
-    osSemaphoreRelease(audio_semHandle);
-  }
-}
+	// 等待信号量初始化，防止高优先级任务饿死低优先级初始化任务
+	while (audio_semHandle == NULL)
+	{
+		osDelay(10);
+	}
 
-/**
- * @brief  Tx Transfer completed callback
- * @param  hi2s: I2S handle
- * @retval None
- */
-void HAL_I2S_TxCpltCallback(I2S_HandleTypeDef *hi2s) {
-  if (hi2s->Instance == SPI2) {
-    audio_state = 2; // Fill second half
-    osSemaphoreRelease(audio_semHandle);
-  }
-}
-
-void music_player_task(void) {
-  UINT bytesRead;
-
-  // 等待信号量初始化，防止高优先级任务饿死低优先级初始化任务
-  while (audio_semHandle == NULL) {
-    osDelay(10);
-  }
-
-  for (;;) {
-    if (osSemaphoreAcquire(audio_semHandle, osWaitForever) == osOK) {
-      if (audio_state == 1) {
-        // Fill first half
-        f_read(&wavFile, &audio_buffer[0], AUDIO_BUFFER_SIZE, &bytesRead);
-        if (bytesRead < AUDIO_BUFFER_SIZE) {
-          memset(&audio_buffer[0], 0, AUDIO_BUFFER_SIZE - bytesRead);
-          if (bytesRead == 0)
-            f_lseek(&wavFile, sizeof(WAV_Header_TypeDef));
-        }
-      } else if (audio_state == 2) {
-        // Fill second half
-        f_read(&wavFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2],
-               AUDIO_BUFFER_SIZE, &bytesRead);
-        if (bytesRead < AUDIO_BUFFER_SIZE) {
-          memset(&audio_buffer[AUDIO_BUFFER_SIZE / 2], 0,
-                 AUDIO_BUFFER_SIZE - bytesRead);
-          if (bytesRead == 0)
-            f_lseek(&wavFile, sizeof(WAV_Header_TypeDef));
-        }
-      }
-    }
-  }
+	for (;;)
+	{
+		if (osSemaphoreAcquire(audio_semHandle, osWaitForever) == osOK)
+		{
+			if (audio_state == 1)
+			{
+				// Fill first half
+				f_read(&wavFile, &audio_buffer[0], AUDIO_BUFFER_SIZE,
+						&bytesRead);
+				if (bytesRead < AUDIO_BUFFER_SIZE)
+				{
+					memset(&audio_buffer[0], 0, AUDIO_BUFFER_SIZE - bytesRead);
+					if (bytesRead == 0)
+						f_lseek(&wavFile, sizeof(WAV_Header_TypeDef));
+				}
+			}
+			else if (audio_state == 2)
+			{
+				// Fill second half
+				f_read(&wavFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2],
+						AUDIO_BUFFER_SIZE, &bytesRead);
+				if (bytesRead < AUDIO_BUFFER_SIZE)
+				{
+					memset(&audio_buffer[AUDIO_BUFFER_SIZE / 2], 0,
+							AUDIO_BUFFER_SIZE - bytesRead);
+					if (bytesRead == 0)
+						f_lseek(&wavFile, sizeof(WAV_Header_TypeDef));
+				}
+			}
+		}
+	}
 }
