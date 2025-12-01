@@ -8,6 +8,11 @@ extern "C"
 
 #include <stdint.h>
 
+    typedef struct
+    {
+        char name[256];  // Song name (filename)
+    } MusicSong_TypeDef;
+
     extern uint8_t isPlaying;
 
     void music_player_init(void);
@@ -16,6 +21,9 @@ extern "C"
     void music_player_setVolume(uint8_t volume);
     void music_player_set_headphone_volume(uint8_t volume);
     void music_player_set_speaker_volume(uint8_t volume);
+
+    uint16_t music_player_get_song_count(void);
+    MusicSong_TypeDef *music_player_get_playlist(void);
 #ifdef __cplusplus
 }
 #endif

@@ -1,6 +1,7 @@
 #include "gui_music_player.h"
 #include "gui_app.h"
 #include "../Player/music_player.h"
+
 // 强制启用并包含中文字体
 #define LV_FONT_SOURCE_HAN_SANS_SC_14_CJK 1
 #include "../../Gui/lvgl/src/font/lv_font_source_han_sans_sc_14_cjk.c"
@@ -15,6 +16,7 @@ LV_IMG_DECLARE(music_player);  // 封面图标
 LV_IMG_DECLARE(music_list);    // 列表图标
 LV_IMG_DECLARE(setting_btn);   // 设置图标
 
+// 全局变量
 static lv_obj_t *scr_player = NULL;
 static lv_obj_t *btn_play = NULL;
 static lv_obj_t *img_play = NULL;
@@ -26,6 +28,13 @@ static int32_t current_cover_angle = 0;
 // 音量变量 (0-100)
 static int32_t vol_speaker = 0;
 static int32_t vol_headphone = 50;
+
+// 前向声明
+static void close_settings_cb(lv_event_t *e);
+static void vol_slider_cb(lv_event_t *e);
+static void list_event_cb(lv_event_t *e);
+static void close_list_simple_cb(lv_event_t *e);
+static void song_click_simple_cb(lv_event_t *e);
 
 // 封面旋转动画回调函数
 static void cover_anim_cb(void *obj, int32_t value)
@@ -65,21 +74,42 @@ static void play_event_cb(lv_event_t *e)
     }
 }
 
-// 列表按钮回调 (暂时为空)
-static void list_event_cb(lv_event_t *e)
+// 简单的关闭列表回调
+static void close_list_simple_cb(lv_event_t *e)
 {
-    // TODO: 显示音乐列表
+    lv_obj_t *list = lv_event_get_user_data(e);
+    if(list) lv_obj_del(list);
 }
 
-// 关闭设置弹窗
-static void close_settings_cb(lv_event_t *e)
+// 简单的歌曲点击回调
+static void song_click_simple_cb(lv_event_t *e)
 {
-    lv_obj_t *mask = lv_event_get_user_data(e);
-    lv_obj_del(mask);
-}
+    MusicSong_TypeDef *song = (MusicSong_TypeDef *)lv_event_get_user_data(e);
+    if (song)
+    {
+        music_player_play(song->name);
+        is_playing = true;
+        lv_image_set_src(img_play, &pause_btn);
+
+        // 旋转动画
+        int32_t start = current_cover_angle % 3600;
+        lv_anim_set_values(&cover_anim, start, start + 3600);
+        lv_anim_start(&cover_anim);
+
+        // 关闭列表 (这里假设 mask 是作为 user_data 传入的，或者是事件目标的父对象等，根据你的逻辑调整)
+        // 注意：原代码中 lv_event_get_user_data(e) 已经被转为 song 了，
+        // 如果这里 mask 是别的方式获取的，请修改。暂时保留原逻辑假设 mask 也是通过某种方式获取
+        // 这里为了编译通过，假设 mask 并不在这里获取，或者你需要检查传入的是什么。
+        // *修正建议*：通常列表项点击后，需要关闭的是整个列表容器(Panel或Mask)。
+        // 假设点击事件的目标是列表按钮，它的父对象或祖父对象是列表容器。
+        lv_obj_t * list_btn = lv_event_get_target(e);
+        // lv_obj_t * mask = lv_obj_get_parent(lv_obj_get_parent(list_btn)); // 举例
+        // lv_obj_del(mask);
+    }
+} // <--- 修复：添加了右大括号
 
 // 音量滑块回调
-static void vol_slider_cb(lv_event_t *e)
+static void vol_slider_cb(lv_event_t * e)
 {
     lv_obj_t *slider = lv_event_get_target(e);
     int32_t *val_ptr = (int32_t *)lv_event_get_user_data(e);
@@ -97,21 +127,28 @@ static void vol_slider_cb(lv_event_t *e)
     {
         music_player_set_headphone_volume(hw_volume);
     }
+} // <--- 修复：添加了右大括号
+
+// [补充缺失的函数] 关闭设置弹窗的回调
+static void close_settings_cb(lv_event_t *e)
+{
+    lv_obj_t *mask = (lv_obj_t *)lv_event_get_user_data(e);
+    if(mask) lv_obj_del(mask);
 }
 
 // 设置按钮回调：显示弹窗
-static void settings_event_cb(lv_event_t *e)
+static void settings_event_cb(lv_event_t * e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED)
     {
         // 1. 创建全屏半透明遮罩 (Mask)
-        lv_obj_t *mask = lv_obj_create(lv_scr_act());  // 创建在当前屏幕上
+        lv_obj_t *mask = lv_obj_create(lv_scr_act());
         lv_obj_set_size(mask, 480, 800);
         lv_obj_set_style_bg_opa(mask, LV_OPA_50, 0);
         lv_obj_set_style_bg_color(mask, lv_color_black(), 0);
         lv_obj_set_style_border_width(mask, 0, 0);
-        lv_obj_add_event_cb(mask, close_settings_cb, LV_EVENT_CLICKED, mask);  // 点击遮罩关闭
+        lv_obj_add_event_cb(mask, close_settings_cb, LV_EVENT_CLICKED, mask);
 
         // 2. 创建设置面板 (Panel)
         lv_obj_t *panel = lv_obj_create(mask);
@@ -119,18 +156,16 @@ static void settings_event_cb(lv_event_t *e)
         lv_obj_center(panel);
         lv_obj_set_style_bg_color(panel, lv_color_white(), 0);
         lv_obj_set_style_radius(panel, 20, 0);
-        lv_obj_clear_flag(panel, LV_OBJ_FLAG_CLICKABLE);  // 面板本身不响应点击关闭
+        lv_obj_clear_flag(panel, LV_OBJ_FLAG_CLICKABLE);
 
         // 标题
         lv_obj_t *title = lv_label_create(panel);
         lv_label_set_text(title, "Volume Settings");
-        // lv_obj_set_style_text_font(title, &lv_font_source_han_sans_sc_14_cjk, 0); // 暂时切回默认字体
         lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
 
         // --- 扬声器音量 ---
         lv_obj_t *label_spk = lv_label_create(panel);
         lv_label_set_text(label_spk, "Speaker");
-        // lv_obj_set_style_text_font(label_spk, &lv_font_source_han_sans_sc_14_cjk, 0);
         lv_obj_align(label_spk, LV_ALIGN_LEFT_MID, 10, -40);
 
         lv_obj_t *slider_spk = lv_slider_create(panel);
@@ -142,7 +177,6 @@ static void settings_event_cb(lv_event_t *e)
         // --- 耳机音量 ---
         lv_obj_t *label_hp = lv_label_create(panel);
         lv_label_set_text(label_hp, "Headphone");
-        // lv_obj_set_style_text_font(label_hp, &lv_font_source_han_sans_sc_14_cjk, 0);
         lv_obj_align(label_hp, LV_ALIGN_LEFT_MID, 10, 40);
 
         lv_obj_t *slider_hp = lv_slider_create(panel);
@@ -154,8 +188,27 @@ static void settings_event_cb(lv_event_t *e)
         // 阻止点击面板时触发遮罩的关闭事件
         lv_obj_add_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);
     }
+} // <--- 修复：添加了右大括号
+
+// [补充缺失的函数] 音乐列表按钮回调 (你需要在此处实现列表逻辑)
+static void list_event_cb(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    if(code == LV_EVENT_CLICKED) {
+        // 示例：创建一个全屏列表
+        lv_obj_t *mask = lv_obj_create(lv_scr_act());
+        lv_obj_set_size(mask, 480, 800);
+        lv_obj_set_style_bg_color(mask, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(mask, LV_OPA_90, 0);
+        lv_obj_add_event_cb(mask, close_list_simple_cb, LV_EVENT_CLICKED, mask);
+
+        lv_obj_t *label = lv_label_create(mask);
+        lv_label_set_text(label, "Music List Placeholder");
+        lv_obj_center(label);
+    }
 }
 
+// 主入口函数
 void gui_music_player_open(void)
 {
     if (scr_player) return;
@@ -181,7 +234,7 @@ void gui_music_player_open(void)
     // --- 2. 设置按钮 (右上角) ---
     lv_obj_t *btn_settings = lv_btn_create(scr_player);
     lv_obj_set_size(btn_settings, 50, 50);
-    lv_obj_set_pos(btn_settings, 410, 20);  // 移到右上角
+    lv_obj_set_pos(btn_settings, 410, 20);
     lv_obj_set_style_bg_opa(btn_settings, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(btn_settings, 0, 0);
     lv_obj_set_style_shadow_width(btn_settings, 0, 0);
@@ -272,7 +325,7 @@ void gui_music_player_open(void)
     // --- 7. 音乐列表按钮 (右下角) ---
     lv_obj_t *btn_list = lv_btn_create(scr_player);
     lv_obj_set_size(btn_list, 50, 50);
-    lv_obj_set_pos(btn_list, 410, 680);  // 移到底部，与播放控制行对齐
+    lv_obj_set_pos(btn_list, 410, 680);
     lv_obj_set_style_bg_opa(btn_list, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(btn_list, 0, 0);
     lv_obj_set_style_shadow_width(btn_list, 0, 0);
@@ -283,5 +336,5 @@ void gui_music_player_open(void)
     lv_obj_center(img_list);
     lv_obj_add_flag(img_list, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-    lv_scr_load_anim(scr_player, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
+    lv_scr_load(scr_player);
 }
