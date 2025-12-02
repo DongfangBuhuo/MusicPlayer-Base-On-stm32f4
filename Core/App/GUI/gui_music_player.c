@@ -2,9 +2,10 @@
 #include "gui_app.h"
 #include "../Player/music_player.h"
 
-// 强制启用并包含中文字体
-#define LV_FONT_SOURCE_HAN_SANS_SC_14_CJK 1
-#include "../../Gui/lvgl/src/font/lv_font_source_han_sans_sc_14_cjk.c"
+// 可选：如果需要中文支持，在 lv_conf.h 中启用
+// 这里不直接 include 字体文件以节省内存
+// #define LV_FONT_SOURCE_HAN_SANS_SC_14_CJK 1
+// #include "../../Gui/lvgl/src/font/lv_font_source_han_sans_sc_14_cjk.c"
 
 // 声明外部资源
 LV_IMG_DECLARE(back_btn);
@@ -78,7 +79,7 @@ static void play_event_cb(lv_event_t *e)
 static void close_list_simple_cb(lv_event_t *e)
 {
     lv_obj_t *list = lv_event_get_user_data(e);
-    if(list) lv_obj_del(list);
+    if (list) lv_obj_del(list);
 }
 
 // 简单的歌曲点击回调
@@ -96,20 +97,18 @@ static void song_click_simple_cb(lv_event_t *e)
         lv_anim_set_values(&cover_anim, start, start + 3600);
         lv_anim_start(&cover_anim);
 
-        // 关闭列表 (这里假设 mask 是作为 user_data 传入的，或者是事件目标的父对象等，根据你的逻辑调整)
-        // 注意：原代码中 lv_event_get_user_data(e) 已经被转为 song 了，
-        // 如果这里 mask 是别的方式获取的，请修改。暂时保留原逻辑假设 mask 也是通过某种方式获取
-        // 这里为了编译通过，假设 mask 并不在这里获取，或者你需要检查传入的是什么。
-        // *修正建议*：通常列表项点击后，需要关闭的是整个列表容器(Panel或Mask)。
-        // 假设点击事件的目标是列表按钮，它的父对象或祖父对象是列表容器。
-        lv_obj_t * list_btn = lv_event_get_target(e);
-        // lv_obj_t * mask = lv_obj_get_parent(lv_obj_get_parent(list_btn)); // 举例
-        // lv_obj_del(mask);
+        // 关闭列表弹窗（新层级：按钮 -> 遮罩）
+        lv_obj_t *btn = lv_event_get_target(e);
+        if (btn)
+        {
+            lv_obj_t *mask = lv_obj_get_parent(btn);
+            if (mask) lv_obj_del(mask);
+        }
     }
-} // <--- 修复：添加了右大括号
+}
 
 // 音量滑块回调
-static void vol_slider_cb(lv_event_t * e)
+static void vol_slider_cb(lv_event_t *e)
 {
     lv_obj_t *slider = lv_event_get_target(e);
     int32_t *val_ptr = (int32_t *)lv_event_get_user_data(e);
@@ -127,17 +126,17 @@ static void vol_slider_cb(lv_event_t * e)
     {
         music_player_set_headphone_volume(hw_volume);
     }
-} // <--- 修复：添加了右大括号
+}
 
-// [补充缺失的函数] 关闭设置弹窗的回调
+// 关闭设置弹窗的回调
 static void close_settings_cb(lv_event_t *e)
 {
     lv_obj_t *mask = (lv_obj_t *)lv_event_get_user_data(e);
-    if(mask) lv_obj_del(mask);
+    if (mask) lv_obj_del(mask);
 }
 
 // 设置按钮回调：显示弹窗
-static void settings_event_cb(lv_event_t * e)
+static void settings_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED)
@@ -188,23 +187,67 @@ static void settings_event_cb(lv_event_t * e)
         // 阻止点击面板时触发遮罩的关闭事件
         lv_obj_add_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);
     }
-} // <--- 修复：添加了右大括号
+}
 
-// [补充缺失的函数] 音乐列表按钮回调 (你需要在此处实现列表逻辑)
+// 音乐列表回调：美观且轻量
 static void list_event_cb(lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-    if(code == LV_EVENT_CLICKED) {
-        // 示例：创建一个全屏列表
+    if (code == LV_EVENT_CLICKED)
+    {
+        // 创建遮罩
         lv_obj_t *mask = lv_obj_create(lv_scr_act());
+        if (!mask) return;
+
         lv_obj_set_size(mask, 480, 800);
         lv_obj_set_style_bg_color(mask, lv_color_black(), 0);
-        lv_obj_set_style_bg_opa(mask, LV_OPA_90, 0);
+        lv_obj_set_style_bg_opa(mask, LV_OPA_80, 0);
+        lv_obj_set_style_border_width(mask, 0, 0);
+        lv_obj_set_style_pad_all(mask, 0, 0);
         lv_obj_add_event_cb(mask, close_list_simple_cb, LV_EVENT_CLICKED, mask);
 
-        lv_obj_t *label = lv_label_create(mask);
-        lv_label_set_text(label, "Music List Placeholder");
-        lv_obj_center(label);
+        // 标题
+        lv_obj_t *title = lv_label_create(mask);
+        if (!title)
+        {
+            lv_obj_del(mask);
+            return;
+        }
+        lv_label_set_text(title, LV_SYMBOL_AUDIO " Music Playlist");
+        lv_obj_set_style_text_color(title, lv_color_white(), 0);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 150);
+
+        // 创建3个按钮
+        int y_start = 220;
+        MusicSong_TypeDef *playlist = music_player_get_playlist();
+        for (int i = 0; i < music_player_get_song_count(); i++)
+        {
+            lv_obj_t *btn = lv_btn_create(mask);
+            if (!btn) break;
+
+            lv_obj_set_size(btn, 340, 60);
+            lv_obj_set_pos(btn, 70, y_start + i * 75);
+            lv_obj_set_style_radius(btn, 12, 0);
+
+            // 统一背景色（使用主色调，微调渐变）
+            lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+            lv_obj_set_style_bg_grad_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
+            lv_obj_set_style_bg_grad_dir(btn, LV_GRAD_DIR_HOR, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_STATE_PRESSED);
+
+            lv_obj_add_event_cb(btn, song_click_simple_cb, LV_EVENT_CLICKED, &playlist[i]);
+
+            // 单个标签显示所有信息
+            lv_obj_t *label = lv_label_create(btn);
+            if (label)
+            {
+                char text[64];
+                lv_snprintf(text, sizeof(text), LV_SYMBOL_AUDIO "%s", playlist[i].name);
+                lv_label_set_text(label, text);
+                lv_obj_set_style_text_color(label, lv_color_white(), 0);
+                lv_obj_center(label);
+            }
+        }
     }
 }
 
