@@ -64,7 +64,7 @@ extern TIM_HandleTypeDef htim6;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
-    .stack_size = 1024 * 4,
+    .stack_size = 2048 * 4,
     .priority = (osPriority_t)osPriorityNormal,
 };
 
