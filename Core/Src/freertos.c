@@ -35,11 +35,6 @@
 #include "tim.h"
 
 // 外部变量声明（来自 music_player.c）
-extern volatile uint8_t request_play;
-extern char current_song_name[64];
-extern void music_player_process_song(const char *filename);
-extern osSemaphoreId_t request_playHandle;
-extern osMessageQueueId_t music_eventQueueHandle;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -182,31 +177,38 @@ void StartAudioTask(void *argument)
     Music_Event event;
     while (1)
     {
-        // if (osSemaphoreAcquire(request_playHandle, osWaitForever) == osOK)
-        // {
-        //     music_player_process_song(current_song_name);
-        // }
-        // osDelay(10);
-    	osMessageQueueReset(music_eventQueueHandle);
-
-        osMessageQueueGet(music_eventQueueHandle, &event, NULL, 200);
-        switch (event)
+        // 1. 处理控制消息 (非阻塞)
+        if (osMessageQueueGet(music_eventQueueHandle, &event, NULL, 0) == osOK)
         {
-            case MUSIC_PLAY:
-                //music_player_play(current_song_name);
-                music_player_process_song(current_song_name);
-            	break;
-            case MUSIC_RELOAD:
-                //music_player_play(current_song_name);
-            	 music_player_process_song(current_song_name);
-            	break;
-            case MUSIC_STOP:
-                music_player_stop();
-                break;
-            default:
-                break;
+            switch (event)
+            {
+                case MUSIC_RELOAD:
+                    // 只有重新选择歌曲才算成Reload
+                    music_player_process_song(music_player_get_currentName());
+                    break;
+                case MUSIC_PAUSE:
+                    music_player_pause();
+                    break;
+                case MUSIC_RESUME:
+                    music_player_resume();
+                    break;
+                case MUSIC_STOP:
+                    music_player_stop();
+                    break;
+                default:
+                    break;
+            }
         }
-        osDelay(10);
+
+        // 2. 维持音频播放 (填充数据)
+        music_player_update();
+
+        // 3. 稍微让出 CPU，避免空转过快 (music_player_update 内部有信号量等待，所以这里可以很短)
+        // 如果没有播放，delay 可以长一点；如果正在播放，依靠 update 里的信号量超时来控制节奏
+        if (!isPlaying)
+        {
+            osDelay(10);
+        }
     }
 }
 /* USER CODE END Application */

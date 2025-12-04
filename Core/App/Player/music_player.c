@@ -5,7 +5,7 @@
 #include "i2c.h"
 #include "i2s.h"
 #include "main.h"
-#include "cmsis_os.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -43,15 +43,14 @@ static WAV_Header_TypeDef wavHeader;
 // --- Playlist Data ---
 static MusicSong_TypeDef playlist[MAX_PLAYLIST_SIZE];
 static uint16_t music_count = 0;
+static char current_song_name[64] = {0};
 
 // --- Control Flags & State ---
 uint8_t isPlaying = 0;
 volatile uint8_t audio_state = 0;
-char current_song_name[64] = {0};  // 去掉static，供freertos.c访问
 
 // --- RTOS Objects ---
-osSemaphoreId_t audio_semHandle = NULL;
-osSemaphoreId_t request_playHandle = NULL;
+static osSemaphoreId_t audio_semHandle = NULL;
 
 osMessageQueueId_t music_eventQueueHandle = NULL;
 
@@ -75,7 +74,6 @@ void music_player_init(void)
 
     // Create binary semaphore for audio buffer synchronization
     audio_semHandle = osSemaphoreNew(1, 0, NULL);
-    request_playHandle = osSemaphoreNew(1, 0, NULL);
     music_eventQueueHandle = osMessageQueueNew(5, sizeof(Music_Event), NULL);
     // 初始化ES8388
     if (ES8388_Init(&hi2c1) != 0)
@@ -131,11 +129,11 @@ void music_player_init(void)
  */
 void music_player_play(const char *filename)
 {
-    Music_Event event;
-    strncpy(current_song_name, filename, sizeof(current_song_name) - 1);
-    // osSemaphoreRelease(request_playHandle);
-    event = MUSIC_RELOAD;
-    osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
+    // Music_Event event;
+    // strncpy(current_song_name, filename, sizeof(current_song_name) - 1);
+    // // osSemaphoreRelease(request_playHandle);
+    // event = MUSIC_RELOAD;
+    // osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
 }
 
 /**
@@ -220,41 +218,36 @@ void music_player_process_song(const char *filename)  // 去掉static，供freer
     taskENTER_CRITICAL();
     isPlaying = 1;
     taskEXIT_CRITICAL();
-    // 播放循环
-    while (isPlaying)
+}
+
+/**
+ * @brief  Audio update loop (called periodically by task)
+ * @retval None
+ */
+void music_player_update(void)
+{
+    if (!isPlaying) return;
+
+    UINT bytesRead;
+
+    // 等待半传输或传输完成中断信号 (使用短超时，避免阻塞任务太久)
+    if (osSemaphoreAcquire(audio_semHandle, 5) == osOK)
     {
-        // 检查是否有新的播放请求，如果有则立即退出当前播放
-        if (osSemaphoreAcquire(request_playHandle, 0) == osOK)
+        if (audio_state == 1)  // 半传输完成，填充前半部分
         {
-            osSemaphoreRelease(request_playHandle);
-            break;
+            f_read(&wavFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
+        }
+        else if (audio_state == 2)  // 传输完成，填充后半部分
+        {
+            f_read(&wavFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE, &bytesRead);
         }
 
-        // 等待半传输或传输完成中断信号
-        if (osSemaphoreAcquire(audio_semHandle, 100) == osOK)  // 超时100ms，避免死锁
+        if (bytesRead < AUDIO_BUFFER_SIZE)
         {
-            if (audio_state == 1)  // 半传输完成，填充前半部分
-            {
-                f_read(&wavFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
-            }
-            else if (audio_state == 2)  // 传输完成，填充后半部分
-            {
-                f_read(&wavFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE, &bytesRead);
-            }
-
-            if (bytesRead < AUDIO_BUFFER_SIZE)
-            {
-                // 文件结束
-                isPlaying = 0;
-                break;
-            }
+            // 文件结束
+            music_player_stop();
         }
     }
-
-    // 停止传输
-    HAL_I2S_DMAStop(&hi2s2);
-    f_close(&wavFile);
-    isPlaying = 0;
 }
 
 /**
@@ -291,7 +284,10 @@ void music_player_set_speaker_volume(uint8_t volume)
     ES8388_Write_Reg(ES8388_DACCONTROL26, volume);  // LOUT2 (Speaker L)
     ES8388_Write_Reg(ES8388_DACCONTROL27, volume);  // ROUT2 (Speaker R)
 }
-
+char *music_player_get_currentName(void)
+{
+    return current_song_name;
+}
 /**
  * @brief  Get playlist pointer
  * @retval Pointer to the playlist array (read-only)
@@ -305,7 +301,8 @@ const MusicSong_TypeDef *music_player_get_playlist(void)
  * @brief  Get song count in playlist
  * @retval Number of songs
  */
-uint16_t music_player_get_song_count(void)
+
+const uint16_t music_player_get_song_count(void)
 {
     return music_count;
 }
@@ -355,13 +352,27 @@ static void Bulid_MusicList(void)
     }
     f_closedir(&dir);
 }
-void music_player_stop(void)
+void music_player_pause(void)
 {
-    HAL_I2S_DMAStop(&hi2s2);
-    f_close(&wavFile);
+    HAL_I2S_DMAPause(&hi2s2);
     taskENTER_CRITICAL();
     isPlaying = 0;
     taskEXIT_CRITICAL();
+}
+void music_player_resume(void)
+{
+    HAL_I2S_DMAResume(&hi2s2);
+    taskENTER_CRITICAL();
+    isPlaying = 1;
+    taskEXIT_CRITICAL();
+}
+void music_player_stop(void)
+{
+    taskENTER_CRITICAL();
+    isPlaying = 1;
+    taskEXIT_CRITICAL();
+    HAL_I2S_DMAStop(&hi2s2);
+    f_close(&wavFile);
 }
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s)

@@ -7,7 +7,7 @@ extern "C"
 #endif
 
 #include <stdint.h>
-
+#include "cmsis_os.h"
     typedef enum
     {
         MUSIC_FORMAT_WAV,
@@ -22,22 +22,28 @@ extern "C"
 
     typedef enum
     {
-        MUSIC_PLAY,
         MUSIC_RELOAD,
+        MUSIC_PAUSE,
+        MUSIC_RESUME,
         MUSIC_STOP,
     } Music_Event;
 
     extern uint8_t isPlaying;
+    extern osMessageQueueId_t music_eventQueueHandle;
 
+    void music_player_init(void);
+    void music_player_resume(void);
+    void music_player_pause(void);
+    void music_player_stop(void);
 
-    void music_player_play(const char *filename);
     void music_player_setVolume(uint8_t volume);
     void music_player_set_headphone_volume(uint8_t volume);
     void music_player_set_speaker_volume(uint8_t volume);
-    void music_player_stop(void);
     void music_player_process_song(const char *filename);
+    void music_player_update(void);
 
-    uint16_t music_player_get_song_count(void);
+    char *music_player_get_currentName();
+    const uint16_t music_player_get_song_count(void);
     const MusicSong_TypeDef *music_player_get_playlist(void);
 #ifdef __cplusplus
 }

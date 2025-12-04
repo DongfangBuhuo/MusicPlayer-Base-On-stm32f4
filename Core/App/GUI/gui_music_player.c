@@ -1,6 +1,9 @@
 #include "gui_music_player.h"
+
 #include "gui_app.h"
 #include "../Player/music_player.h"
+#include <string.h>
+#include "cmsis_os.h"
 
 // 可选：如果需要中文支持，在 lv_conf.h 中启用
 // 这里不直接 include 字体文件以节省内存
@@ -56,7 +59,7 @@ static void back_event_cb(lv_event_t *e)
 
 static void play_event_cb(lv_event_t *e)
 {
-   // Music_Event event;
+    Music_Event event;
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED)
     {
@@ -67,15 +70,16 @@ static void play_event_cb(lv_event_t *e)
             int32_t start = current_cover_angle % 3600;
             lv_anim_set_values(&cover_anim, start, start + 3600);
             lv_anim_start(&cover_anim);
-
+            if (music_player_get_currentName()) event = MUSIC_RESUME;
         }
         else
         {
             lv_image_set_src(img_play, &play_music_btn);
             lv_anim_del(cover, NULL);
-
+            if (music_player_get_currentName()) event = MUSIC_PAUSE;
         }
     }
+    if (event) osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
 }
 
 // 简单的关闭列表回调
@@ -91,7 +95,13 @@ static void song_click_simple_cb(lv_event_t *e)
     MusicSong_TypeDef *song = (MusicSong_TypeDef *)lv_event_get_user_data(e);
     if (song)
     {
-        music_player_play(song->name);
+        // 设置当前歌曲名称
+        strcpy(music_player_get_currentName(), song->name);
+
+        Music_Event event;
+        event = MUSIC_RELOAD;
+        osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
+
         is_playing = true;
         lv_image_set_src(img_play, &pause_btn);
 
