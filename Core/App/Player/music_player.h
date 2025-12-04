@@ -20,13 +20,21 @@ extern "C"
         MusicSong_Format format;
     } MusicSong_TypeDef;
 
+    typedef enum
+    {
+        MUSIC_PLAY,
+        MUSIC_RELOAD,
+        MUSIC_STOP,
+    } Music_Event;
+
     extern uint8_t isPlaying;
 
-    void music_player_init(void);
+
     void music_player_play(const char *filename);
     void music_player_setVolume(uint8_t volume);
     void music_player_set_headphone_volume(uint8_t volume);
     void music_player_set_speaker_volume(uint8_t volume);
+    void music_player_stop(void);
     void music_player_process_song(const char *filename);
 
     uint16_t music_player_get_song_count(void);

@@ -56,6 +56,7 @@ static void back_event_cb(lv_event_t *e)
 
 static void play_event_cb(lv_event_t *e)
 {
+   // Music_Event event;
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED)
     {
@@ -66,11 +67,13 @@ static void play_event_cb(lv_event_t *e)
             int32_t start = current_cover_angle % 3600;
             lv_anim_set_values(&cover_anim, start, start + 3600);
             lv_anim_start(&cover_anim);
+
         }
         else
         {
             lv_image_set_src(img_play, &play_music_btn);
             lv_anim_del(cover, NULL);
+
         }
     }
 }

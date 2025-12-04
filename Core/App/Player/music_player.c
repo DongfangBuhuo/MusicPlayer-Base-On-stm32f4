@@ -47,11 +47,13 @@ static uint16_t music_count = 0;
 // --- Control Flags & State ---
 uint8_t isPlaying = 0;
 volatile uint8_t audio_state = 0;
-char current_song_name[64] = {0};   // 去掉static，供freertos.c访问
-volatile uint8_t request_play = 0;  // 去掉static，供freertos.c访问
+char current_song_name[64] = {0};  // 去掉static，供freertos.c访问
 
 // --- RTOS Objects ---
 osSemaphoreId_t audio_semHandle = NULL;
+osSemaphoreId_t request_playHandle = NULL;
+
+osMessageQueueId_t music_eventQueueHandle = NULL;
 
 /* External variables --------------------------------------------------------*/
 extern I2S_HandleTypeDef hi2s2;
@@ -73,7 +75,8 @@ void music_player_init(void)
 
     // Create binary semaphore for audio buffer synchronization
     audio_semHandle = osSemaphoreNew(1, 0, NULL);
-
+    request_playHandle = osSemaphoreNew(1, 0, NULL);
+    music_eventQueueHandle = osMessageQueueNew(5, sizeof(Music_Event), NULL);
     // 初始化ES8388
     if (ES8388_Init(&hi2c1) != 0)
     {
@@ -83,8 +86,8 @@ void music_player_init(void)
     }
 
     // 设置初始音量 (与GUI默认值同步: vol_headphone=30 对应硬件10)
-  //  music_player_set_headphone_volume(10);  // 30% -> 10/33
-    music_player_set_speaker_volume(10);     // 初始禁用喇叭
+    //  music_player_set_headphone_volume(10);  // 30% -> 10/33
+    music_player_set_speaker_volume(10);  // 初始禁用喇叭
 
     // LED闪1次表示ES8388初始化成功
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
@@ -128,8 +131,11 @@ void music_player_init(void)
  */
 void music_player_play(const char *filename)
 {
+    Music_Event event;
     strncpy(current_song_name, filename, sizeof(current_song_name) - 1);
-    request_play = 1;
+    // osSemaphoreRelease(request_playHandle);
+    event = MUSIC_RELOAD;
+    osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
 }
 
 /**
@@ -211,17 +217,16 @@ void music_player_process_song(const char *filename)  // 去掉static，供freer
     // DMA启动成功，LED保持常亮
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
 
-    // 手动确保I2S外设已使能（HAL_I2S_Transmit_DMA应该已经做了，但我们double check）
-    __HAL_I2S_ENABLE(&hi2s2);
-
+    taskENTER_CRITICAL();
     isPlaying = 1;
-
+    taskEXIT_CRITICAL();
     // 播放循环
     while (isPlaying)
     {
         // 检查是否有新的播放请求，如果有则立即退出当前播放
-        if (request_play)
+        if (osSemaphoreAcquire(request_playHandle, 0) == osOK)
         {
+            osSemaphoreRelease(request_playHandle);
             break;
         }
 
@@ -350,6 +355,15 @@ static void Bulid_MusicList(void)
     }
     f_closedir(&dir);
 }
+void music_player_stop(void)
+{
+    HAL_I2S_DMAStop(&hi2s2);
+    f_close(&wavFile);
+    taskENTER_CRITICAL();
+    isPlaying = 0;
+    taskEXIT_CRITICAL();
+}
+
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s)
 {
     if (hi2s == &hi2s2)

@@ -38,7 +38,8 @@
 extern volatile uint8_t request_play;
 extern char current_song_name[64];
 extern void music_player_process_song(const char *filename);
-
+extern osSemaphoreId_t request_playHandle;
+extern osMessageQueueId_t music_eventQueueHandle;
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -178,12 +179,32 @@ void StartDefaultTask(void *argument)
 /* USER CODE BEGIN Application */
 void StartAudioTask(void *argument)
 {
+    Music_Event event;
     while (1)
     {
-        if (request_play)
+        // if (osSemaphoreAcquire(request_playHandle, osWaitForever) == osOK)
+        // {
+        //     music_player_process_song(current_song_name);
+        // }
+        // osDelay(10);
+    	osMessageQueueReset(music_eventQueueHandle);
+
+        osMessageQueueGet(music_eventQueueHandle, &event, NULL, 200);
+        switch (event)
         {
-            request_play = 0;
-            music_player_process_song(current_song_name);
+            case MUSIC_PLAY:
+                //music_player_play(current_song_name);
+                music_player_process_song(current_song_name);
+            	break;
+            case MUSIC_RELOAD:
+                //music_player_play(current_song_name);
+            	 music_player_process_song(current_song_name);
+            	break;
+            case MUSIC_STOP:
+                music_player_stop();
+                break;
+            default:
+                break;
         }
         osDelay(10);
     }
