@@ -85,7 +85,7 @@ void music_player_init(void)
     }
 
     // 设置初始音量 (与GUI默认值同步: vol_headphone=30 对应硬件10)
-    //music_player_set_headphone_volume(10);
+    // music_player_set_headphone_volume(10);
     music_player_set_speaker_volume(20);
 
     // LED闪1次表示ES8388初始化成功
@@ -283,18 +283,6 @@ void music_player_set_speaker_volume(uint8_t volume)
     ES8388_Write_Reg(ES8388_DACCONTROL26, volume);  // LOUT2 (Speaker L)
     ES8388_Write_Reg(ES8388_DACCONTROL27, volume);  // ROUT2 (Speaker R)
 }
-char *music_player_get_currentName(void)
-{
-    return current_song_name;
-}
-/**
- * @brief  Get playlist pointer
- * @retval Pointer to the playlist array (read-only)
- */
-const MusicSong_TypeDef *music_player_get_playlist(void)
-{
-    return playlist;
-}
 
 /**
  * @brief  Get song count in playlist
@@ -313,6 +301,16 @@ const uint16_t music_player_get_currentIndex(void)
 void music_player_set_currentIndex(uint16_t index)
 {
     current_song_index = index;
+}
+
+char *music_player_get_currentName()
+{
+    return current_song_name;
+}
+
+const MusicSong_TypeDef *music_player_get_playlist(void)
+{
+    return playlist;
 }
 /**
  * @brief  Build music list by scanning SD card

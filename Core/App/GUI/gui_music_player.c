@@ -230,7 +230,7 @@ static void list_event_cb(lv_event_t *e)
 
         // 创建3个按钮
         int y_start = 220;
-        MusicSong_TypeDef *playlist = music_player_get_playlist();
+        const MusicSong_TypeDef *playlist = music_player_get_playlist();
         for (int i = 0; i < music_player_get_song_count(); i++)
         {
             lv_obj_t *btn = lv_btn_create(mask);
