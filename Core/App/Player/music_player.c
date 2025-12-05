@@ -211,7 +211,6 @@ void music_player_process_song()  // 去掉static，供freertos.c调用
         f_close(&musicFile);
         return;
     }
-    __HAL_I2S_ENABLE(&hi2s2);
     // DMA启动成功，LED保持常亮
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
 
