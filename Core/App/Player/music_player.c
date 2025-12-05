@@ -115,6 +115,10 @@ void music_player_init(void)
         HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_RESET);
         HAL_Delay(200);
     }
+    extern DMA_HandleTypeDef hdma_spi2_tx;
+    __HAL_DMA_ENABLE_IT(&hdma_spi2_tx, DMA_IT_TC);
+    __HAL_DMA_ENABLE_IT(&hdma_spi2_tx, DMA_IT_HT);
+    HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
     Bulid_MusicList();
 }
 
@@ -184,7 +188,7 @@ void music_player_process_song()  // 去掉static，供freertos.c调用
     }
 
     // 配置I2S采样率
-    HAL_I2S_DeInit(&hi2s2);
+    //   HAL_I2S_DeInit(&hi2s2);
     hi2s2.Init.AudioFreq = wavHeader.SampleRate;
     if (HAL_I2S_Init(&hi2s2) != HAL_OK)
     {
@@ -196,6 +200,7 @@ void music_player_process_song()  // 去掉static，供freertos.c调用
     f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE * 2, &bytesRead);
 
     // 启动I2S DMA传输
+
     HAL_StatusTypeDef dma_status = HAL_I2S_Transmit_DMA(&hi2s2, audio_buffer, AUDIO_BUFFER_SIZE);
 
     if (dma_status != HAL_OK)
@@ -214,40 +219,50 @@ void music_player_process_song()  // 去掉static，供freertos.c调用
     // DMA启动成功，LED保持常亮
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
 
-    // 清空队列中的旧消息，防止错位
-    osMessageQueueReset(audio_data_queueHandle);
+    // 手动确保I2S外设已使能（匹配正常工作版本的逻辑）
+    __HAL_I2S_ENABLE(&hi2s2);
+
+    // 清空信号量，确保从干净状态开始
+    while (osSemaphoreAcquire(audio_semHandle, 0) == osOK)
+    {
+    }
 
     taskENTER_CRITICAL();
     isPlaying = 1;
     taskEXIT_CRITICAL();
+
+    // 立即进入数据填充循环，不要有延迟！
+    music_player_update();
 }
 
 /**
- * @brief  Audio update loop (called periodically by task)
+ * @brief  Audio update loop - runs tight loop until stopped or control command arrives
  * @retval None
  */
 void music_player_update(void)
 {
-    if (!isPlaying) return;
-
     UINT bytesRead;
-
-    // 等待半传输或传输完成中断信号
-    if (osSemaphoreAcquire(audio_semHandle, 50) == osOK)
+    // 紧密循环，保证数据及时填充
+    while (isPlaying)
     {
-        if (audio_state == 1)  // 半传输完成，填充前半部分
+        // 等待 DMA 中断信号
+        if (osSemaphoreAcquire(audio_semHandle, 10) == osOK)
         {
-            f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
-        }
-        else if (audio_state == 2)  // 传输完成，填充后半部分
-        {
-            f_read(&musicFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE, &bytesRead);
-        }
+            if (audio_state == 1)  // 半传输完成，填充前半部分
+            {
+                f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
+            }
+            else if (audio_state == 2)  // 传输完成，填充后半部分
+            {
+                f_read(&musicFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE, &bytesRead);
+            }
 
-        if (bytesRead < AUDIO_BUFFER_SIZE)
-        {
-            // 文件结束
-            music_player_stop();
+            if (bytesRead < AUDIO_BUFFER_SIZE)
+            {
+                // 文件结束
+                music_player_stop();
+                break;
+            }
         }
     }
 }
