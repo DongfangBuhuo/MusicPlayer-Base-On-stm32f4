@@ -86,7 +86,7 @@ void music_player_init(void)
 
     // 设置初始音量 (与GUI默认值同步: vol_headphone=30 对应硬件10)
     // music_player_set_headphone_volume(10);
-    music_player_set_speaker_volume(20);
+    //music_player_set_speaker_volume(20);
 
     // LED闪1次表示ES8388初始化成功
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);

@@ -44,9 +44,6 @@ uint8_t ES8388_Init(I2C_HandleTypeDef *hi2c)
     ES8388_Write_Reg(0x04,
                      0x3C);  // 使能所有输出 (LOUT1/ROUT1 + LOUT2/ROUT2)
 
-    /* 3.1 额外确保喇叭功放关闭 */
-    ES8388_Write_Reg(0x38, 0x00);  // 关闭左喇叭功放
-    ES8388_Write_Reg(0x39, 0x00);  // 关闭右喇叭功放
 
     /* 4. 时钟配置 */
     ES8388_Write_Reg(0x08, 0x00);  // MCLK不分频，主模式
