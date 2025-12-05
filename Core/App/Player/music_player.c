@@ -37,20 +37,21 @@ static uint16_t audio_buffer[AUDIO_BUFFER_SIZE];
 
 // --- File System Objects ---
 static FATFS fs;
-static FIL wavFile;
+static FIL musicFile;
 static WAV_Header_TypeDef wavHeader;
 
 // --- Playlist Data ---
 static MusicSong_TypeDef playlist[MAX_PLAYLIST_SIZE];
 static uint16_t music_count = 0;
 static char current_song_name[64] = {0};
-
+static uint16_t current_song_index = 0;
 // --- Control Flags & State ---
 uint8_t isPlaying = 0;
 volatile uint8_t audio_state = 0;
 
 // --- RTOS Objects ---
 static osSemaphoreId_t audio_semHandle = NULL;
+static osMessageQueueId_t audio_data_queueHandle = NULL;
 
 osMessageQueueId_t music_eventQueueHandle = NULL;
 
@@ -74,6 +75,7 @@ void music_player_init(void)
 
     // Create binary semaphore for audio buffer synchronization
     audio_semHandle = osSemaphoreNew(1, 0, NULL);
+    audio_data_queueHandle = osMessageQueueNew(4, sizeof(uint8_t), NULL);
     music_eventQueueHandle = osMessageQueueNew(5, sizeof(Music_Event), NULL);
     // 初始化ES8388
     if (ES8388_Init(&hi2c1) != 0)
@@ -84,8 +86,8 @@ void music_player_init(void)
     }
 
     // 设置初始音量 (与GUI默认值同步: vol_headphone=30 对应硬件10)
-    //  music_player_set_headphone_volume(10);  // 30% -> 10/33
-    music_player_set_speaker_volume(10);  // 初始禁用喇叭
+    music_player_set_headphone_volume(20);  // 30% -> 10/33
+    music_player_set_speaker_volume(0);     // 初始禁用喇叭
 
     // LED闪1次表示ES8388初始化成功
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
@@ -114,12 +116,6 @@ void music_player_init(void)
         HAL_Delay(200);
     }
     Bulid_MusicList();
-
-    // 最后确保DMA中断已使能（double check）
-    extern DMA_HandleTypeDef hdma_spi2_tx;
-    __HAL_DMA_ENABLE_IT(&hdma_spi2_tx, DMA_IT_TC);
-    __HAL_DMA_ENABLE_IT(&hdma_spi2_tx, DMA_IT_HT);
-    HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
 }
 
 /**
@@ -127,42 +123,45 @@ void music_player_init(void)
  * @param  filename: Name of the song file to play
  * @retval None
  */
-void music_player_play(const char *filename)
-{
-    // Music_Event event;
-    // strncpy(current_song_name, filename, sizeof(current_song_name) - 1);
-    // // osSemaphoreRelease(request_playHandle);
-    // event = MUSIC_RELOAD;
-    // osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
-}
+void music_player_play(const char *filename) {}
 
 /**
  * @brief  Actual audio processing logic (runs in task)
  * @param  filename: Name of the song file to process
  * @retval None
  */
-void music_player_process_song(const char *filename)  // 去掉static，供freertos.c调用
+void music_player_process_song()  // 去掉static，供freertos.c调用
 {
     FRESULT res;
     UINT bytesRead;
-    char music_full_name[64] = "0:/music/";
+    char music_full_name[128] = "0:/music/";
 
     // 停止之前的播放（如果需要）
     if (isPlaying)
     {
         isPlaying = 0;
         HAL_I2S_DMAStop(&hi2s2);
-        f_close(&wavFile);
+        f_close(&musicFile);
         HAL_Delay(100);  // 等待DMA停止
     }
 
     // 打开WAV文件
-    strcat(music_full_name, filename);
-    res = f_open(&wavFile, music_full_name, FA_READ);
+    strncpy(current_song_name, playlist[current_song_index].name, sizeof(current_song_name) - 1);
+    current_song_name[sizeof(current_song_name) - 1] = '\0';
+
+    snprintf(music_full_name, sizeof(music_full_name), "0:/music/%s", playlist[music_player_get_currentIndex()].name);
+    if (playlist[music_player_get_currentIndex()].format == MUSIC_FORMAT_WAV)
+    {
+        res = f_open(&musicFile, music_full_name, FA_READ);
+    }
+    else
+    {
+        // mp3
+    }
     if (res != FR_OK)
     {
         // 尝试不带路径打开（兼容根目录）
-        res = f_open(&wavFile, filename, FA_READ);
+        res = f_open(&musicFile, music_full_name, FA_READ);
         if (res != FR_OK)
         {
             return;  // 打开失败直接返回，不要死循环
@@ -170,30 +169,31 @@ void music_player_process_song(const char *filename)  // 去掉static，供freer
     }
 
     // 读取WAV头
-    res = f_read(&wavFile, &wavHeader, sizeof(wavHeader), &bytesRead);
+    res = f_read(&musicFile, &wavHeader, sizeof(wavHeader), &bytesRead);
     if (res != FR_OK || bytesRead != sizeof(wavHeader))
     {
-        f_close(&wavFile);
+        f_close(&musicFile);
         return;
     }
 
     // 检查是否为WAV文件
     if (strncmp(wavHeader.ChunkID, "RIFF", 4) != 0 || strncmp(wavHeader.Format, "WAVE", 4) != 0)
     {
-        f_close(&wavFile);
+        f_close(&musicFile);
         return;
     }
 
     // 配置I2S采样率
+    HAL_I2S_DeInit(&hi2s2);
     hi2s2.Init.AudioFreq = wavHeader.SampleRate;
     if (HAL_I2S_Init(&hi2s2) != HAL_OK)
     {
-        f_close(&wavFile);
+        f_close(&musicFile);
         return;
     }
 
     // 填充初始缓存
-    f_read(&wavFile, audio_buffer, AUDIO_BUFFER_SIZE * 2, &bytesRead);
+    f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE * 2, &bytesRead);
 
     // 启动I2S DMA传输
     HAL_StatusTypeDef dma_status = HAL_I2S_Transmit_DMA(&hi2s2, audio_buffer, AUDIO_BUFFER_SIZE);
@@ -208,12 +208,15 @@ void music_player_process_song(const char *filename)  // 去掉static，供freer
             HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_RESET);
             HAL_Delay(200);
         }
-        f_close(&wavFile);
+        f_close(&musicFile);
         return;
     }
-
+    __HAL_I2S_ENABLE(&hi2s2);
     // DMA启动成功，LED保持常亮
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
+
+    // 清空队列中的旧消息，防止错位
+    osMessageQueueReset(audio_data_queueHandle);
 
     taskENTER_CRITICAL();
     isPlaying = 1;
@@ -230,16 +233,16 @@ void music_player_update(void)
 
     UINT bytesRead;
 
-    // 等待半传输或传输完成中断信号 (使用短超时，避免阻塞任务太久)
-    if (osSemaphoreAcquire(audio_semHandle, 5) == osOK)
+    // 等待半传输或传输完成中断信号
+    if (osSemaphoreAcquire(audio_semHandle, 50) == osOK)
     {
         if (audio_state == 1)  // 半传输完成，填充前半部分
         {
-            f_read(&wavFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
+            f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
         }
         else if (audio_state == 2)  // 传输完成，填充后半部分
         {
-            f_read(&wavFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE, &bytesRead);
+            f_read(&musicFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE, &bytesRead);
         }
 
         if (bytesRead < AUDIO_BUFFER_SIZE)
@@ -306,7 +309,15 @@ const uint16_t music_player_get_song_count(void)
 {
     return music_count;
 }
+const uint16_t music_player_get_currentIndex(void)
+{
+    return current_song_index;
+}
 
+void music_player_set_currentIndex(uint16_t index)
+{
+    current_song_index = index;
+}
 /**
  * @brief  Build music list by scanning SD card
  * @retval None
@@ -338,14 +349,14 @@ static void Bulid_MusicList(void)
         if (strcmp(fno.fname + strlen(fno.fname) - 4, ".wav") == 0)
         {
             strncpy(playlist[music_count].name, fno.fname, sizeof(playlist[music_count].name) - 1);
-            playlist[music_count].name[255] = '\0';  // 确保 null 结尾
+            playlist[music_count].name[sizeof(playlist[music_count].name) - 1] = '\0';  // 确保 null 结尾
             playlist[music_count].format = MUSIC_FORMAT_WAV;
             music_count++;
         }
         else if (strcmp(fno.fname + strlen(fno.fname) - 4, ".mp3") == 0)
         {
             strncpy(playlist[music_count].name, fno.fname, sizeof(playlist[music_count].name) - 1);
-            playlist[music_count].name[255] = '\0';  // 确保 null 结尾
+            playlist[music_count].name[sizeof(playlist[music_count].name) - 1] = '\0';  // 确保 null 结尾
             playlist[music_count].format = MUSIC_FORMAT_MP3;
             music_count++;
         }
@@ -368,11 +379,13 @@ void music_player_resume(void)
 }
 void music_player_stop(void)
 {
-    taskENTER_CRITICAL();
-    isPlaying = 1;
-    taskEXIT_CRITICAL();
     HAL_I2S_DMAStop(&hi2s2);
-    f_close(&wavFile);
+    f_close(&musicFile);
+    taskENTER_CRITICAL();
+    isPlaying = 0;
+    taskEXIT_CRITICAL();
+    // 清空队列中的残留消息
+    osMessageQueueReset(audio_data_queueHandle);
 }
 
 void HAL_I2S_TxHalfCpltCallback(I2S_HandleTypeDef *hi2s)

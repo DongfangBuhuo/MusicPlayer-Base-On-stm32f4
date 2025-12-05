@@ -16,7 +16,7 @@ extern "C"
 
     typedef struct
     {
-        char name[256];
+        char name[64];
         MusicSong_Format format;
     } MusicSong_TypeDef;
 
@@ -39,9 +39,12 @@ extern "C"
     void music_player_setVolume(uint8_t volume);
     void music_player_set_headphone_volume(uint8_t volume);
     void music_player_set_speaker_volume(uint8_t volume);
-    void music_player_process_song(const char *filename);
+    void music_player_process_song();
     void music_player_update(void);
 
+    void music_player_set_currentIndex(uint16_t index);
+
+    const uint16_t music_player_get_currentIndex(void);
     char *music_player_get_currentName();
     const uint16_t music_player_get_song_count(void);
     const MusicSong_TypeDef *music_player_get_playlist(void);

@@ -159,8 +159,6 @@ void StartDefaultTask(void *argument)
     lv_task_handler();
     osDelay(10);  // 给足够时间完成第一帧渲染
 
-    // music_player_play("1.wav");
-
     /* Infinite loop */
     for (;;)
     {
@@ -183,8 +181,7 @@ void StartAudioTask(void *argument)
             switch (event)
             {
                 case MUSIC_RELOAD:
-                    // 只有重新选择歌曲才算成Reload
-                    music_player_process_song(music_player_get_currentName());
+                    music_player_process_song();
                     break;
                 case MUSIC_PAUSE:
                     music_player_pause();
@@ -203,8 +200,7 @@ void StartAudioTask(void *argument)
         // 2. 维持音频播放 (填充数据)
         music_player_update();
 
-        // 3. 稍微让出 CPU，避免空转过快 (music_player_update 内部有信号量等待，所以这里可以很短)
-        // 如果没有播放，delay 可以长一点；如果正在播放，依靠 update 里的信号量超时来控制节奏
+        // 3. 稍微让出 CPU
         if (!isPlaying)
         {
             osDelay(10);
