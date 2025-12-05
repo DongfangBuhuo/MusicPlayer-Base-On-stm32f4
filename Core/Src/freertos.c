@@ -69,7 +69,7 @@ osThreadId_t audioTaskHandle;
 const osThreadAttr_t audioTask_attributes = {
     .name = "audioTask",
     .stack_size = 1024 * 4,
-    .priority = (osPriority_t)osPriorityHigh,
+    .priority = (osPriority_t)osPriorityAboveNormal,
 };
 
 /* Private function prototypes -----------------------------------------------*/

@@ -42,7 +42,7 @@ uint8_t ES8388_Init(I2C_HandleTypeDef *hi2c)
     ES8388_Write_Reg(0x01, 0x50);  // 使能VMID，VREF
     ES8388_Write_Reg(0x03, 0x00);  // 关闭所有ADC相关电源
     ES8388_Write_Reg(0x04,
-                     0x0C);  // 只使能LOUT1/ROUT1 (耳机)，禁用LOUT2/ROUT2 (喇叭)
+                     0x3C);  // 使能所有输出 (LOUT1/ROUT1 + LOUT2/ROUT2)
 
     /* 3.1 额外确保喇叭功放关闭 */
     ES8388_Write_Reg(0x38, 0x00);  // 关闭左喇叭功放

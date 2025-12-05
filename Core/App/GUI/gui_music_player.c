@@ -92,31 +92,29 @@ static void close_list_simple_cb(lv_event_t *e)
 // 简单的歌曲点击回调
 static void song_click_simple_cb(lv_event_t *e)
 {
-    int *index = (int *)lv_event_get_user_data(e);
-    if (index)
+    int index = (int)(intptr_t)lv_event_get_user_data(e);
+
+    // 设置当前歌曲名称
+    // strcpy(music_player_get_currentName(), song->name);
+    music_player_set_currentIndex(index);
+    Music_Event event;
+    event = MUSIC_RELOAD;
+    osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
+
+    is_playing = true;
+    lv_image_set_src(img_play, &pause_btn);
+
+    // 旋转动画
+    int32_t start = current_cover_angle % 3600;
+    lv_anim_set_values(&cover_anim, start, start + 3600);
+    lv_anim_start(&cover_anim);
+
+    // 关闭列表弹窗（新层级：按钮 -> 遮罩）
+    lv_obj_t *btn = lv_event_get_target(e);
+    if (btn)
     {
-        // 设置当前歌曲名称
-        // strcpy(music_player_get_currentName(), song->name);
-        music_player_set_currentIndex(*index);
-        Music_Event event;
-        event = MUSIC_RELOAD;
-        osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
-
-        is_playing = true;
-        lv_image_set_src(img_play, &pause_btn);
-
-        // 旋转动画
-        int32_t start = current_cover_angle % 3600;
-        lv_anim_set_values(&cover_anim, start, start + 3600);
-        lv_anim_start(&cover_anim);
-
-        // 关闭列表弹窗（新层级：按钮 -> 遮罩）
-        lv_obj_t *btn = lv_event_get_target(e);
-        if (btn)
-        {
-            lv_obj_t *mask = lv_obj_get_parent(btn);
-            if (mask) lv_obj_del(mask);
-        }
+        lv_obj_t *mask = lv_obj_get_parent(btn);
+        if (mask) lv_obj_del(mask);
     }
 }
 
@@ -246,8 +244,8 @@ static void list_event_cb(lv_event_t *e)
             lv_obj_set_style_bg_grad_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
             lv_obj_set_style_bg_grad_dir(btn, LV_GRAD_DIR_HOR, LV_PART_MAIN);
             lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_STATE_PRESSED);
-            //直接传递下标即可 ，不用传递MusicSong_TypeDef    
-            lv_obj_add_event_cb(btn, song_click_simple_cb, LV_EVENT_CLICKED, &i);
+            // 直接传递下标即可 ，不用传递MusicSong_TypeDef
+            lv_obj_add_event_cb(btn, song_click_simple_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
 
             // 单个标签显示所有信息
             lv_obj_t *label = lv_label_create(btn);

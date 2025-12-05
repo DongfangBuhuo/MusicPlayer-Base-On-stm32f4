@@ -82,12 +82,11 @@ void music_player_init(void)
     {
         // LED常亮表示ES8388初始化失败
         HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
-        while (1);
     }
 
     // 设置初始音量 (与GUI默认值同步: vol_headphone=30 对应硬件10)
-    music_player_set_headphone_volume(20);  // 30% -> 10/33
-    music_player_set_speaker_volume(0);     // 初始禁用喇叭
+    //music_player_set_headphone_volume(10);
+    music_player_set_speaker_volume(20);
 
     // LED闪1次表示ES8388初始化成功
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
@@ -187,8 +186,6 @@ void music_player_process_song()  // 去掉static，供freertos.c调用
         return;
     }
 
-    // 配置I2S采样率
-    //   HAL_I2S_DeInit(&hi2s2);
     hi2s2.Init.AudioFreq = wavHeader.SampleRate;
     if (HAL_I2S_Init(&hi2s2) != HAL_OK)
     {
@@ -219,20 +216,9 @@ void music_player_process_song()  // 去掉static，供freertos.c调用
     // DMA启动成功，LED保持常亮
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
 
-    // 手动确保I2S外设已使能（匹配正常工作版本的逻辑）
-    __HAL_I2S_ENABLE(&hi2s2);
-
-    // 清空信号量，确保从干净状态开始
-    while (osSemaphoreAcquire(audio_semHandle, 0) == osOK)
-    {
-    }
-
     taskENTER_CRITICAL();
     isPlaying = 1;
     taskEXIT_CRITICAL();
-
-    // 立即进入数据填充循环，不要有延迟！
-    music_player_update();
 }
 
 /**
@@ -243,26 +229,22 @@ void music_player_update(void)
 {
     UINT bytesRead;
     // 紧密循环，保证数据及时填充
-    while (isPlaying)
+    // 等待 DMA 中断信号
+    if (osSemaphoreAcquire(audio_semHandle, 10) == osOK)
     {
-        // 等待 DMA 中断信号
-        if (osSemaphoreAcquire(audio_semHandle, 10) == osOK)
+        if (audio_state == 1)  // 半传输完成，填充前半部分
         {
-            if (audio_state == 1)  // 半传输完成，填充前半部分
-            {
-                f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
-            }
-            else if (audio_state == 2)  // 传输完成，填充后半部分
-            {
-                f_read(&musicFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE, &bytesRead);
-            }
+            f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
+        }
+        else if (audio_state == 2)  // 传输完成，填充后半部分
+        {
+            f_read(&musicFile, &audio_buffer[AUDIO_BUFFER_SIZE / 2], AUDIO_BUFFER_SIZE, &bytesRead);
+        }
 
-            if (bytesRead < AUDIO_BUFFER_SIZE)
-            {
-                // 文件结束
-                music_player_stop();
-                break;
-            }
+        if (bytesRead < AUDIO_BUFFER_SIZE)
+        {
+            // 文件结束
+            music_player_stop();
         }
     }
 }
