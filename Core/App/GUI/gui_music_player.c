@@ -44,8 +44,8 @@ static void list_event_cb(lv_event_t *e);
 static void close_list_simple_cb(lv_event_t *e);
 static void song_click_simple_cb(lv_event_t *e);
 
-// 音量步进值
-#define VOL_STEP 10
+// 音量步进值 (更细的步进，便于调节)
+#define VOL_STEP 15
 
 // 封面旋转动画回调函数
 static void cover_anim_cb(void *obj, int32_t value)
@@ -130,7 +130,7 @@ static void vol_btn_cb(lv_event_t *e)
 {
     intptr_t user_data = (intptr_t)lv_event_get_user_data(e);
     int is_speaker = (user_data >> 8) & 0xFF;  // 高8位: 0=耳机, 1=喇叭
-    int is_increase = user_data & 0xFF;         // 低8位: 0=减少, 1=增加
+    int is_increase = user_data & 0xFF;        // 低8位: 0=减少, 1=增加
 
     int32_t *vol_ptr = is_speaker ? &vol_speaker : &vol_headphone;
     lv_obj_t *label = is_speaker ? label_spk_val : label_hp_val;
@@ -153,7 +153,7 @@ static void vol_btn_cb(lv_event_t *e)
         lv_label_set_text_fmt(label, "%d", (int)*vol_ptr);
     }
 
-    // 发送事件
+    // 发送事件 (0-100 百分比转换为 0-33 硬件值)
     uint8_t hw_volume = (uint8_t)(*vol_ptr * 33 / 100);
     Music_Event event = {0};
     event.type = is_speaker ? MUSIC_SET_SPEAKER_VOL : MUSIC_SET_HEADPHONE_VOL;
@@ -190,6 +190,10 @@ static void settings_event_cb(lv_event_t *e)
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED)
     {
+        // 同步硬件音量到GUI变量
+        vol_headphone = music_player_get_headphone_volume();
+        vol_speaker = music_player_get_speaker_volume();
+
         // 1. 创建全屏半透明遮罩 (Mask)
         lv_obj_t *mask = lv_obj_create(lv_scr_act());
         lv_obj_set_size(mask, 480, 800);
@@ -251,7 +255,8 @@ static void settings_event_cb(lv_event_t *e)
         lbl = lv_label_create(btn_hp_dec);
         lv_label_set_text(lbl, "-");
         lv_obj_center(lbl);
-        lv_obj_add_event_cb(btn_hp_dec, vol_btn_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(0x0000));  // headphone=0, dec=0
+        lv_obj_add_event_cb(btn_hp_dec, vol_btn_cb, LV_EVENT_CLICKED,
+                            (void *)(intptr_t)(0x0000));  // headphone=0, dec=0
 
         label_hp_val = lv_label_create(panel);
         lv_label_set_text_fmt(label_hp_val, "%d", (int)vol_headphone);
@@ -265,7 +270,8 @@ static void settings_event_cb(lv_event_t *e)
         lbl = lv_label_create(btn_hp_inc);
         lv_label_set_text(lbl, "+");
         lv_obj_center(lbl);
-        lv_obj_add_event_cb(btn_hp_inc, vol_btn_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(0x0001));  // headphone=0, inc=1
+        lv_obj_add_event_cb(btn_hp_inc, vol_btn_cb, LV_EVENT_CLICKED,
+                            (void *)(intptr_t)(0x0001));  // headphone=0, inc=1
 
         // 阻止点击面板时触发遮罩的关闭事件
         lv_obj_add_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);

@@ -58,6 +58,10 @@ extern "C"
     char *music_player_get_currentName();
     const uint16_t music_player_get_song_count(void);
     const MusicSong_TypeDef *music_player_get_playlist(void);
+
+    // 读取音量 (百分比 0~100)
+    uint8_t music_player_get_headphone_volume(void);
+    uint8_t music_player_get_speaker_volume(void);
 #ifdef __cplusplus
 }
 #endif

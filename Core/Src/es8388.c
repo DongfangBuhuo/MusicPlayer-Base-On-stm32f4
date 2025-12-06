@@ -9,12 +9,17 @@
 
 static I2C_HandleTypeDef *es_i2c;
 
+// 音量副本 (shadow) - ES8388 寄存器可能是只写的
+// 存储 0-33 的值
+static uint8_t headphone_vol = 16;  // 默认值 16 (约 50%)
+static uint8_t speaker_vol = 0;
+
 /**
  * @brief  写寄存器
  */
 uint8_t ES8388_Write_Reg(uint8_t reg, uint8_t data)
 {
-    return HAL_I2C_Mem_Write(es_i2c, ES8388_ADDR, reg, I2C_MEMADD_SIZE_8BIT, &data, 1, 100);
+    return HAL_I2C_Mem_Write(es_i2c, ES8388_ADDR, reg, I2C_MEMADD_SIZE_8BIT, &data, 1, 10);
 }
 
 /**
@@ -50,7 +55,6 @@ uint8_t ES8388_Init(I2C_HandleTypeDef *hi2c)
     ES8388_Write_Reg(0x01, 0x50);  // 使能VMID,VREF
     ES8388_Write_Reg(0x03, 0x00);  // 关闭所有ADC相关电源
 
-
     /* 3.1 额外确保喇叭功放关闭 */
     ES8388_Write_Reg(0x38, 0x00);  // 关闭左喇叭功放
     ES8388_Write_Reg(0x39, 0x00);  // 关闭右喇叭功放
@@ -78,12 +82,10 @@ uint8_t ES8388_Init(I2C_HandleTypeDef *hi2c)
     ES8388_Write_Reg(0x2A, 0x80);  // 只启用到ROUT1的路径
 
     /* 9. 输出音量设置 */
-    ES8388_Write_Reg(0x2E, 0x1a);  // LOUT1音量 (左耳机) 10/33
-    ES8388_Write_Reg(0x2F, 0x1a);  // ROUT1音量 (右耳机) 10/33
+    ES8388_Write_Reg(0x2E, 0x00);  // LOUT1音量 (左耳机) 30/33 ≈ 90%
+    ES8388_Write_Reg(0x2F, 0x00);  // ROUT1音量 (右耳机) 30/33 ≈ 90%
     ES8388_Write_Reg(0x30, 0x00);  // LOUT2音量设为0 (左喇叭静音)
     ES8388_Write_Reg(0x31, 0x00);  // ROUT2音量设为0 (右喇叭静音)
-
-
 
     ES8388_Write_Reg(0x04, 0x3C);  // 只使能LOUT1/ROUT1 (耳机),禁用LOUT2/ROUT2 (喇叭)
     /* 10. 启动DAC */
@@ -95,22 +97,28 @@ uint8_t ES8388_Init(I2C_HandleTypeDef *hi2c)
 }
 
 /**
- * @brief  设置音量
- * @param  volume: 0 ~ 33
+ * @brief  设置耳机音量
+ * @param  volume: 0 ~ 33 (0 = 静音)
  */
 void ES8388_SetVolume(uint8_t volume)
 {
     if (volume > 33) volume = 33;
 
-    // ES8388 的 LOUT1/ROUT1 音量寄存器是 0x26 和 0x27
-    // 范围通常是 0x00 (最大衰减) 到 0x21 (+3dB)
-    // 我们可以直接映射
-    ES8388_Write_Reg(ES8388_DACCONTROL24, volume);  // LOUT1 (Headphone L)
-    ES8388_Write_Reg(ES8388_DACCONTROL25, volume);  // ROUT1 (Headphone R)
+    // 更新副本
+    headphone_vol = volume;
 
-    // 如果使用的是 LOUT2/ROUT2，则操作 0x2E, 0x2F
-    // ES8388_Write_Reg(ES8388_DACCONTROL24, volume);
-    // ES8388_Write_Reg(ES8388_DACCONTROL25, volume);
+    if (volume == 0)
+    {
+        // 音量为 0 时启用 DAC 静音
+        ES8388_Write_Reg(0x19, 0x04);  // DAC 软静音
+    }
+    else
+    {
+        // 取消静音，设置音量
+        ES8388_Write_Reg(0x19, 0x00);    // 取消 DAC 静音
+        ES8388_Write_Reg(0x2E, volume);  // LOUT1 (左耳机)
+        ES8388_Write_Reg(0x2F, volume);  // ROUT1 (右耳机)
+    }
 }
 
 /**
@@ -130,6 +138,22 @@ void ES8388_SetMute(uint8_t mute)
     {
         ES8388_Write_Reg(ES8388_DACCONTROL3, 0x04);
     }
+}
+
+/**
+ * @brief  设置喇叭音量
+ * @param  volume: 0 ~ 33
+ */
+void ES8388_SetSpeakerVol(uint8_t volume)
+{
+    if (volume > 33) volume = 33;
+
+    // 更新副本
+    speaker_vol = volume;
+
+    // 设置 LOUT2/ROUT2 音量
+    ES8388_Write_Reg(ES8388_DACCONTROL26, volume);  // LOUT2 (Speaker L)
+    ES8388_Write_Reg(ES8388_DACCONTROL27, volume);  // ROUT2 (Speaker R)
 }
 
 /**
@@ -160,4 +184,24 @@ void ES8388_SetSpeakerEnable(uint8_t enable)
         ES8388_Write_Reg(0x30, 0x00);  // LOUT2音量为0
         ES8388_Write_Reg(0x31, 0x00);  // ROUT2音量为0
     }
+}
+
+/**
+ * @brief  读取耳机音量
+ * @retval 音量值 0~33
+ */
+uint8_t ES8388_GetHeadphoneVolume(void)
+{
+    HAL_I2C_Mem_Read(es_i2c, ES8388_ADDR, 0x2E, I2C_MEMADD_SIZE_8BIT, &headphone_vol, 1, 10);
+    return headphone_vol;
+}
+
+/**
+ * @brief  读取喜叭音量
+ * @retval 音量值 0~33
+ */
+uint8_t ES8388_GetSpeakerVolume(void)
+{
+    HAL_I2C_Mem_Read(es_i2c, ES8388_ADDR, 0x30, I2C_MEMADD_SIZE_8BIT, &speaker_vol, 1, 10);
+    return speaker_vol;
 }

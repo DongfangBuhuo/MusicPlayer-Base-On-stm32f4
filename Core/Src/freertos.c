@@ -60,16 +60,16 @@ extern TIM_HandleTypeDef htim6;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
-    .stack_size = 2048 * 4,
-    .priority = (osPriority_t)osPriorityNormal,
+    .stack_size = 1024 * 4,
+    .priority = (osPriority_t)osPriorityAboveNormal,
 };
 
 /* Definitions for audioTask */
 osThreadId_t audioTaskHandle;
 const osThreadAttr_t audioTask_attributes = {
     .name = "audioTask",
-    .stack_size = 1024 * 4,
-    .priority = (osPriority_t)osPriorityAboveNormal,
+    .stack_size = 1536 * 4,
+    .priority = (osPriority_t)osPriorityHigh,
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -150,7 +150,6 @@ void StartDefaultTask(void *argument)
     music_player_init();
     gui_app_init();
 
-
     lv_task_handler();
     osDelay(10);
 
@@ -170,7 +169,6 @@ void StartAudioTask(void *argument)
     Music_Event event;
     while (1)
     {
-        // 1. 处理控制消息 (非阻塞)
         if (osMessageQueueGet(music_eventQueueHandle, &event, NULL, 0) == osOK)
         {
             switch (event.type)
