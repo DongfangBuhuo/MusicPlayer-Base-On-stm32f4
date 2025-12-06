@@ -146,18 +146,13 @@ void StartDefaultTask(void *argument)
     // Initialize LVGL input device
     lv_port_indev_init();
 
-    // 【关键修改】先启动 LVGL tick timer，再初始化 GUI
     HAL_TIM_Base_Start_IT(&htim6);
-
-    // 【临时注释】先验证 LVGL 显示，避免被 ES8388/SD 卡初始化卡住
     music_player_init();
-
-    // 初始化 GUI（此时 LVGL tick 已经在运行）
     gui_app_init();
 
-    // 【关键修改】手动触发一次渲染，确保界面显示
+
     lv_task_handler();
-    osDelay(10);  // 给足够时间完成第一帧渲染
+    osDelay(10);
 
     /* Infinite loop */
     for (;;)
@@ -178,7 +173,7 @@ void StartAudioTask(void *argument)
         // 1. 处理控制消息 (非阻塞)
         if (osMessageQueueGet(music_eventQueueHandle, &event, NULL, 0) == osOK)
         {
-            switch (event)
+            switch (event.type)
             {
                 case MUSIC_RELOAD:
                     music_player_process_song();
@@ -191,6 +186,12 @@ void StartAudioTask(void *argument)
                     break;
                 case MUSIC_STOP:
                     music_player_stop();
+                    break;
+                case MUSIC_SET_HEADPHONE_VOL:
+                    music_player_set_headphone_volume(event.param);
+                    break;
+                case MUSIC_SET_SPEAKER_VOL:
+                    music_player_set_speaker_volume(event.param);
                     break;
                 default:
                     break;

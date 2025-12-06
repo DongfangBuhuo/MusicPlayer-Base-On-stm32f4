@@ -26,6 +26,14 @@ extern "C"
         MUSIC_PAUSE,
         MUSIC_RESUME,
         MUSIC_STOP,
+        MUSIC_SET_HEADPHONE_VOL,
+        MUSIC_SET_SPEAKER_VOL,
+    } Music_EventType;
+
+    typedef struct
+    {
+        Music_EventType type;
+        uint8_t param;  // 用于音量值等参数
     } Music_Event;
 
     extern uint8_t isPlaying;

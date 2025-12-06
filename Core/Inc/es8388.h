@@ -43,5 +43,6 @@ void ES8388_SetVolume(uint8_t volume);        // 0~33 (对应 -30dB 到 +3dB)
 void ES8388_SetMute(uint8_t mute);            // 1: Mute, 0: Unmute
 void ES8388_SetSpeakerEnable(uint8_t enable); // 1: 启用喇叭, 0: 禁用喇叭
 uint8_t ES8388_Write_Reg(uint8_t reg, uint8_t data);
+uint8_t ES8388_Read_Reg(uint8_t reg, uint8_t *data);  // 读寄存器
 
 #endif /* INC_ES8388_H_ */

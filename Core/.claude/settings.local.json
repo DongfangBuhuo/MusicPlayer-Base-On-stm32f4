@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:blog.csdn.net)",
+      "WebFetch(domain:www.eet-china.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:manualzz.com)",
+      "WebFetch(domain:dl.radxa.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

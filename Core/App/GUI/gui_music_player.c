@@ -30,15 +30,22 @@ static bool is_playing = false;
 static int32_t current_cover_angle = 0;
 
 // 音量变量 (0-100)
-static int32_t vol_speaker = 0;
-static int32_t vol_headphone = 50;
+static int32_t vol_speaker = 90;
+static int32_t vol_headphone = 90;
+
+// 音量标签 (用于更新显示)
+static lv_obj_t *label_spk_val = NULL;
+static lv_obj_t *label_hp_val = NULL;
 
 // 前向声明
 static void close_settings_cb(lv_event_t *e);
-static void vol_slider_cb(lv_event_t *e);
+static void vol_btn_cb(lv_event_t *e);
 static void list_event_cb(lv_event_t *e);
 static void close_list_simple_cb(lv_event_t *e);
 static void song_click_simple_cb(lv_event_t *e);
+
+// 音量步进值
+#define VOL_STEP 10
 
 // 封面旋转动画回调函数
 static void cover_anim_cb(void *obj, int32_t value)
@@ -59,7 +66,7 @@ static void back_event_cb(lv_event_t *e)
 
 static void play_event_cb(lv_event_t *e)
 {
-    Music_Event event;
+    Music_Event event = {0};
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED)
     {
@@ -70,16 +77,16 @@ static void play_event_cb(lv_event_t *e)
             int32_t start = current_cover_angle % 3600;
             lv_anim_set_values(&cover_anim, start, start + 3600);
             lv_anim_start(&cover_anim);
-            if (music_player_get_currentName()) event = MUSIC_RESUME;
+            if (music_player_get_currentName()) event.type = MUSIC_RESUME;
         }
         else
         {
             lv_image_set_src(img_play, &play_music_btn);
             lv_anim_del(cover, NULL);
-            if (music_player_get_currentName()) event = MUSIC_PAUSE;
+            if (music_player_get_currentName()) event.type = MUSIC_PAUSE;
         }
     }
-    if (event) osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
+    if (event.type) osMessageQueuePut(music_eventQueueHandle, &event, 0, 0);
 }
 
 // 简单的关闭列表回调
@@ -97,9 +104,9 @@ static void song_click_simple_cb(lv_event_t *e)
     // 设置当前歌曲名称
     // strcpy(music_player_get_currentName(), song->name);
     music_player_set_currentIndex(index);
-    Music_Event event;
-    event = MUSIC_RELOAD;
-    osMessageQueuePut(music_eventQueueHandle, &event, 0, NULL);
+    Music_Event event = {0};
+    event.type = MUSIC_RELOAD;
+    osMessageQueuePut(music_eventQueueHandle, &event, 0, 0);
 
     is_playing = true;
     lv_image_set_src(img_play, &pause_btn);
@@ -118,25 +125,40 @@ static void song_click_simple_cb(lv_event_t *e)
     }
 }
 
-// 音量滑块回调
-static void vol_slider_cb(lv_event_t *e)
+// 音量按钮回调 (+/-)
+static void vol_btn_cb(lv_event_t *e)
 {
-    lv_obj_t *slider = lv_event_get_target(e);
-    int32_t *val_ptr = (int32_t *)lv_event_get_user_data(e);
-    *val_ptr = lv_slider_get_value(slider);
+    intptr_t user_data = (intptr_t)lv_event_get_user_data(e);
+    int is_speaker = (user_data >> 8) & 0xFF;  // 高8位: 0=耳机, 1=喇叭
+    int is_increase = user_data & 0xFF;         // 低8位: 0=减少, 1=增加
 
-    // 映射 0-100 到 0-33
-    uint8_t hw_volume = (uint8_t)(*val_ptr * 33 / 100);
+    int32_t *vol_ptr = is_speaker ? &vol_speaker : &vol_headphone;
+    lv_obj_t *label = is_speaker ? label_spk_val : label_hp_val;
 
-    // 调用底层音量设置
-    if (val_ptr == &vol_speaker)
+    // 调整音量
+    if (is_increase)
     {
-        music_player_set_speaker_volume(hw_volume);
+        *vol_ptr += VOL_STEP;
+        if (*vol_ptr > 100) *vol_ptr = 100;
     }
-    else if (val_ptr == &vol_headphone)
+    else
     {
-        music_player_set_headphone_volume(hw_volume);
+        *vol_ptr -= VOL_STEP;
+        if (*vol_ptr < 0) *vol_ptr = 0;
     }
+
+    // 更新标签
+    if (label)
+    {
+        lv_label_set_text_fmt(label, "%d", (int)*vol_ptr);
+    }
+
+    // 发送事件
+    uint8_t hw_volume = (uint8_t)(*vol_ptr * 33 / 100);
+    Music_Event event = {0};
+    event.type = is_speaker ? MUSIC_SET_SPEAKER_VOL : MUSIC_SET_HEADPHONE_VOL;
+    event.param = hw_volume;
+    osMessageQueuePut(music_eventQueueHandle, &event, 0, 0);
 }
 
 // 关闭设置弹窗的回调
@@ -162,7 +184,7 @@ static void settings_event_cb(lv_event_t *e)
 
         // 2. 创建设置面板 (Panel)
         lv_obj_t *panel = lv_obj_create(mask);
-        lv_obj_set_size(panel, 360, 300);
+        lv_obj_set_size(panel, 360, 280);
         lv_obj_center(panel);
         lv_obj_set_style_bg_color(panel, lv_color_white(), 0);
         lv_obj_set_style_radius(panel, 20, 0);
@@ -176,24 +198,58 @@ static void settings_event_cb(lv_event_t *e)
         // --- 扬声器音量 ---
         lv_obj_t *label_spk = lv_label_create(panel);
         lv_label_set_text(label_spk, "Speaker");
-        lv_obj_align(label_spk, LV_ALIGN_LEFT_MID, 10, -40);
+        lv_obj_align(label_spk, LV_ALIGN_LEFT_MID, 15, -50);
 
-        lv_obj_t *slider_spk = lv_slider_create(panel);
-        lv_obj_set_size(slider_spk, 200, 15);
-        lv_obj_align(slider_spk, LV_ALIGN_RIGHT_MID, -10, -40);
-        lv_slider_set_value(slider_spk, vol_speaker, LV_ANIM_OFF);
-        lv_obj_add_event_cb(slider_spk, vol_slider_cb, LV_EVENT_VALUE_CHANGED, &vol_speaker);
+        // Speaker: [-] [值] [+]
+        lv_obj_t *btn_spk_dec = lv_btn_create(panel);
+        lv_obj_set_size(btn_spk_dec, 50, 40);
+        lv_obj_align(btn_spk_dec, LV_ALIGN_RIGHT_MID, -140, -50);
+        lv_obj_t *lbl = lv_label_create(btn_spk_dec);
+        lv_label_set_text(lbl, "-");
+        lv_obj_center(lbl);
+        lv_obj_add_event_cb(btn_spk_dec, vol_btn_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(0x0100));  // speaker=1, dec=0
+
+        label_spk_val = lv_label_create(panel);
+        lv_label_set_text_fmt(label_spk_val, "%d", (int)vol_speaker);
+        lv_obj_set_style_text_align(label_spk_val, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_width(label_spk_val, 50);
+        lv_obj_align(label_spk_val, LV_ALIGN_RIGHT_MID, -75, -50);
+
+        lv_obj_t *btn_spk_inc = lv_btn_create(panel);
+        lv_obj_set_size(btn_spk_inc, 50, 40);
+        lv_obj_align(btn_spk_inc, LV_ALIGN_RIGHT_MID, -10, -50);
+        lbl = lv_label_create(btn_spk_inc);
+        lv_label_set_text(lbl, "+");
+        lv_obj_center(lbl);
+        lv_obj_add_event_cb(btn_spk_inc, vol_btn_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(0x0101));  // speaker=1, inc=1
 
         // --- 耳机音量 ---
         lv_obj_t *label_hp = lv_label_create(panel);
         lv_label_set_text(label_hp, "Headphone");
-        lv_obj_align(label_hp, LV_ALIGN_LEFT_MID, 10, 40);
+        lv_obj_align(label_hp, LV_ALIGN_LEFT_MID, 15, 30);
 
-        lv_obj_t *slider_hp = lv_slider_create(panel);
-        lv_obj_set_size(slider_hp, 200, 15);
-        lv_obj_align(slider_hp, LV_ALIGN_RIGHT_MID, -10, 40);
-        lv_slider_set_value(slider_hp, vol_headphone, LV_ANIM_OFF);
-        lv_obj_add_event_cb(slider_hp, vol_slider_cb, LV_EVENT_VALUE_CHANGED, &vol_headphone);
+        // Headphone: [-] [值] [+]
+        lv_obj_t *btn_hp_dec = lv_btn_create(panel);
+        lv_obj_set_size(btn_hp_dec, 50, 40);
+        lv_obj_align(btn_hp_dec, LV_ALIGN_RIGHT_MID, -140, 30);
+        lbl = lv_label_create(btn_hp_dec);
+        lv_label_set_text(lbl, "-");
+        lv_obj_center(lbl);
+        lv_obj_add_event_cb(btn_hp_dec, vol_btn_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(0x0000));  // headphone=0, dec=0
+
+        label_hp_val = lv_label_create(panel);
+        lv_label_set_text_fmt(label_hp_val, "%d", (int)vol_headphone);
+        lv_obj_set_style_text_align(label_hp_val, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_width(label_hp_val, 50);
+        lv_obj_align(label_hp_val, LV_ALIGN_RIGHT_MID, -75, 30);
+
+        lv_obj_t *btn_hp_inc = lv_btn_create(panel);
+        lv_obj_set_size(btn_hp_inc, 50, 40);
+        lv_obj_align(btn_hp_inc, LV_ALIGN_RIGHT_MID, -10, 30);
+        lbl = lv_label_create(btn_hp_inc);
+        lv_label_set_text(lbl, "+");
+        lv_obj_center(lbl);
+        lv_obj_add_event_cb(btn_hp_inc, vol_btn_cb, LV_EVENT_CLICKED, (void *)(intptr_t)(0x0001));  // headphone=0, inc=1
 
         // 阻止点击面板时触发遮罩的关闭事件
         lv_obj_add_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);

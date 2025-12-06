@@ -1,0 +1,128 @@
+﻿/*
+ * es8388.c
+ *
+ *  Created on: Nov 26, 2025
+ *      Author: Administrator
+ */
+
+#include "es8388.h"
+
+static I2C_HandleTypeDef *es_i2c;
+
+/**
+ * @brief  鍐欏瘎瀛樺櫒
+ */
+uint8_t ES8388_Write_Reg(uint8_t reg, uint8_t data) {
+  return HAL_I2C_Mem_Write(es_i2c, ES8388_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
+                           &data, 1, 100);
+}
+
+/**
+ * @brief  鍒濆鍖?ES8388
+ * @param  hi2c: I2C鍙ユ焺 (渚嬪 &hi2c1)
+ * @return 0: 鎴愬姛, 鍏朵粬: 澶辫触
+ */
+uint8_t ES8388_Init(I2C_HandleTypeDef *hi2c) {
+  es_i2c = hi2c;
+  uint8_t res = 0;
+
+  /* 1. 澶嶄綅鑺墖 */
+  ES8388_Write_Reg(0x00, 0x80); // 杞浣?  ES8388_Write_Reg(0x00, 0x00); // 閫€鍑哄浣?  HAL_Delay(100);
+
+  /* 2. 鐢垫簮绠＄悊閰嶇疆 */
+  ES8388_Write_Reg(0x01, 0x58); // 绂佺敤鎵€鏈夌數婧愶紝鍑嗗閰嶇疆
+  ES8388_Write_Reg(0x02, 0xF0); // 鍏抽棴ADC鐢垫簮锛屽彧浣跨敤DAC
+  ES8388_Write_Reg(0x03, 0x00); // 鍏抽棴鎵€鏈夎緭鍑猴紝鍖呮嫭鍠囧彮鍔熸斁
+
+  /* 3. 浣胯兘鍙傝€冨拰DAC鐢垫簮 */
+  ES8388_Write_Reg(0x00, 0x06); // 浣胯兘鍙傝€冿紝500K椹卞姩
+  ES8388_Write_Reg(0x01, 0x50); // 浣胯兘VMID锛孷REF
+  ES8388_Write_Reg(0x03, 0x00); // 鍏抽棴鎵€鏈堿DC鐩稿叧鐢垫簮
+  ES8388_Write_Reg(0x04,
+                   0x0C); // 鍙娇鑳絃OUT1/ROUT1 (鑰虫満)锛岀鐢↙OUT2/ROUT2 (鍠囧彮)
+
+  /* 3.1 棰濆纭繚鍠囧彮鍔熸斁鍏抽棴 */
+  ES8388_Write_Reg(0x38, 0x00); // 鍏抽棴宸﹀枃鍙姛鏀?  ES8388_Write_Reg(0x39, 0x00); // 鍏抽棴鍙冲枃鍙姛鏀?
+  /* 4. 鏃堕挓閰嶇疆 */
+  ES8388_Write_Reg(0x08, 0x00); // MCLK涓嶅垎棰戯紝涓绘ā寮?
+  /* 5. DAC鎺ュ彛閰嶇疆 (I2S鏍煎紡锛?6浣嶏紝44.1kHz) */
+  ES8388_Write_Reg(0x17, 0x18); // DAC I2S鏍煎紡锛?6浣?  ES8388_Write_Reg(0x18, 0x02); // MCLK/LRCK = 256 (44.1kHz)
+  ES8388_Write_Reg(0x2B, 0x80); // DACLRC涓嶢DCLRC鐩稿悓
+
+  /* 6. DAC鏁板瓧闊抽噺 (0x00 = 0dB锛屼笉琛板噺) */
+  ES8388_Write_Reg(0x1A, 0x00); // Left DAC鏁板瓧闊抽噺 0dB
+  ES8388_Write_Reg(0x1B, 0x00); // Right DAC鏁板瓧闊抽噺 0dB
+
+  /* 7. DAC鎺у埗 */
+  ES8388_Write_Reg(0x19, 0x00); // 鍙栨秷闈欓煶锛屾甯稿伐浣?
+  /* 8. 娣烽煶鍣ㄩ厤缃?- 鍙緭鍑哄埌鑰虫満 */
+  ES8388_Write_Reg(0x26, 0x00); // Left DAC to Left Mixer
+  ES8388_Write_Reg(0x27, 0x80); // 鍙惎鐢ㄥ埌LOUT1鐨勮矾寰?  ES8388_Write_Reg(0x28, 0x00); // 鍏抽棴LOUT2娣烽煶鍣?  ES8388_Write_Reg(0x29, 0x00); // 鍏抽棴ROUT2娣烽煶鍣?  ES8388_Write_Reg(0x2A, 0x80); // 鍙惎鐢ㄥ埌ROUT1鐨勮矾寰?
+  /* 9. 杈撳嚭闊抽噺璁剧疆 */
+  ES8388_Write_Reg(0x2E, 0x0a); // LOUT1闊抽噺 (宸﹁€虫満) 28/33
+  ES8388_Write_Reg(0x2F, 0x0a); // ROUT1闊抽噺 (鍙宠€虫満) 28/33
+  ES8388_Write_Reg(0x30, 0x00); // LOUT2闊抽噺璁句负0 (宸﹀枃鍙潤闊?
+  ES8388_Write_Reg(0x31, 0x00); // ROUT2闊抽噺璁句负0 (鍙冲枃鍙潤闊?
+
+  /* 10. 鍚姩DAC */
+  ES8388_Write_Reg(0x02, 0x00); // 鍚姩DAC鐢垫簮
+
+  HAL_Delay(50); // 绛夊緟绋冲畾
+
+  return res;
+}
+
+/**
+ * @brief  璁剧疆闊抽噺
+ * @param  volume: 0 ~ 33
+ */
+void ES8388_SetVolume(uint8_t volume) {
+  if (volume > 33)
+    volume = 33;
+
+  // ES8388 鐨?LOUT1/ROUT1 闊抽噺瀵勫瓨鍣ㄦ槸 0x26 鍜?0x27
+  // 鑼冨洿閫氬父鏄?0x00 (鏈€澶ц“鍑? 鍒?0x21 (+3dB)
+  // 鎴戜滑鍙互鐩存帴鏄犲皠
+  ES8388_Write_Reg(ES8388_DACCONTROL24, volume); // LOUT1 (Headphone L)
+  ES8388_Write_Reg(ES8388_DACCONTROL25, volume); // ROUT1 (Headphone R)
+
+  // 濡傛灉浣跨敤鐨勬槸 LOUT2/ROUT2锛屽垯鎿嶄綔 0x2E, 0x2F
+  // ES8388_Write_Reg(ES8388_DACCONTROL24, volume);
+  // ES8388_Write_Reg(ES8388_DACCONTROL25, volume);
+}
+
+/**
+ * @brief  闈欓煶鎺у埗
+ * @param  mute: 1=闈欓煶, 0=姝ｅ父
+ */
+void ES8388_SetMute(uint8_t mute) {
+  uint8_t reg = 0x04; // 榛樿鍊?  if (mute) {
+    reg |=
+        0x04; // Set mute bit inside Reg 0x19 if needed, or simply zero volume
+    // ES8388 0x19 bit 2 is DAC Mute
+    ES8388_Write_Reg(ES8388_DACCONTROL3, 0x04 | 0x04);
+  } else {
+    ES8388_Write_Reg(ES8388_DACCONTROL3, 0x04);
+  }
+}
+
+/**
+ * @brief  鍠囧彮杈撳嚭鎺у埗
+ * @param  enable: 1=鍚敤鍠囧彮, 0=绂佺敤鍠囧彮
+ */
+void ES8388_SetSpeakerEnable(uint8_t enable) {
+  if (enable) {
+    // 鍚敤鍠囧彮杈撳嚭 (LOUT2/ROUT2)
+    ES8388_Write_Reg(0x04, 0x3C); // 鍚敤鎵€鏈夎緭鍑?    ES8388_Write_Reg(0x27, 0x90); // 璺敱鍒癓OUT1鍜孡OUT2
+    ES8388_Write_Reg(0x2A, 0x90); // 璺敱鍒癛OUT1鍜孯OUT2
+    ES8388_Write_Reg(0x28, 0x38); // LOUT2娣烽煶鍣?    ES8388_Write_Reg(0x29, 0x38); // ROUT2娣烽煶鍣?    ES8388_Write_Reg(0x30, 0x1C); // LOUT2闊抽噺
+    ES8388_Write_Reg(0x31, 0x1C); // ROUT2闊抽噺
+  } else {
+    // 绂佺敤鍠囧彮杈撳嚭锛屽彧淇濈暀鑰虫満
+    ES8388_Write_Reg(0x04, 0x30); // 鍙惎鐢↙OUT1/ROUT1
+    ES8388_Write_Reg(0x27, 0x80); // 鍙矾鐢卞埌LOUT1
+    ES8388_Write_Reg(0x2A, 0x80); // 鍙矾鐢卞埌ROUT1
+    ES8388_Write_Reg(0x28, 0x00); // 鍏抽棴LOUT2娣烽煶鍣?    ES8388_Write_Reg(0x29, 0x00); // 鍏抽棴ROUT2娣烽煶鍣?    ES8388_Write_Reg(0x30, 0x00); // LOUT2闊抽噺涓?
+    ES8388_Write_Reg(0x31, 0x00); // ROUT2闊抽噺涓?
+  }
+}

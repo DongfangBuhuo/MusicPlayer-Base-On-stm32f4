@@ -87,7 +87,7 @@ void music_player_init(void)
     // 设置初始音量 (与GUI默认值同步: vol_headphone=30 对应硬件10)
     // music_player_set_headphone_volume(10);
     //music_player_set_speaker_volume(20);
-
+    ES8388_SetSpeakerEnable(1);
     // LED闪1次表示ES8388初始化成功
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
     HAL_Delay(300);
@@ -276,13 +276,32 @@ void music_player_set_headphone_volume(uint8_t volume)
  */
 void music_player_set_speaker_volume(uint8_t volume)
 {
-    if (volume > 33)
+    if (volume > 33) volume = 33;
+
+    if (volume == 0)
     {
-        volume = 33;
+        // === 完全静音 ===
+        ES8388_Write_Reg(0x19, 0x04);              // 1. DAC软静音
+        ES8388_Write_Reg(0x27, 0x00);              // 2. 关闭LOUT1混音器
+        ES8388_Write_Reg(0x2A, 0x00);              // 3. 关闭ROUT1混音器
+        ES8388_Write_Reg(ES8388_DACCONTROL24, 0);  // 4. LOUT1音量=0
+        ES8388_Write_Reg(ES8388_DACCONTROL25, 0);  // 5. ROUT1音量=0
     }
-    ES8388_Write_Reg(ES8388_DACCONTROL26, volume);  // LOUT2 (Speaker L)
-    ES8388_Write_Reg(ES8388_DACCONTROL27, volume);  // ROUT2 (Speaker R)
+    else
+    {
+        // === 正常播放 ===
+        ES8388_Write_Reg(0x19, 0x00);                   // 1. 取消DAC静音
+        ES8388_Write_Reg(0x27, 0x80);                   // 2. 启用LOUT1混音器
+        ES8388_Write_Reg(0x2A, 0x80);                   // 3. 启用ROUT1混音器
+        ES8388_Write_Reg(ES8388_DACCONTROL24, volume);  // 4. 设置音量
+        ES8388_Write_Reg(ES8388_DACCONTROL25, volume);  // 5. 设置音量
+    }
 }
+/**
+ * @brief  Get song count in playlist
+ * @retval Number of songs
+ */
+
 
 /**
  * @brief  Get song count in playlist
