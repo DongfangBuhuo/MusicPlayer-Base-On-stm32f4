@@ -87,7 +87,7 @@ void music_player_init(void)
     // 设置初始音量 (与GUI默认值同步: vol_headphone=30 对应硬件10)
     // music_player_set_headphone_volume(10);
     //music_player_set_speaker_volume(20);
-    ES8388_SetSpeakerEnable(1);
+    ES8388_SetSpeakerEnable(0);
     // LED闪1次表示ES8388初始化成功
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_SET);
     HAL_Delay(300);
@@ -319,7 +319,7 @@ const uint16_t music_player_get_currentIndex(void)
 
 void music_player_set_currentIndex(uint16_t index)
 {
-    current_song_index = index;
+    current_song_index = index%music_count;
 }
 
 char *music_player_get_currentName()

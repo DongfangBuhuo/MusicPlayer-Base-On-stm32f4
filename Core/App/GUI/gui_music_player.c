@@ -161,6 +161,22 @@ static void vol_btn_cb(lv_event_t *e)
     osMessageQueuePut(music_eventQueueHandle, &event, 0, 0);
 }
 
+// 下一首按钮回调
+static void next_cb(lv_event_t *e)
+{
+    Music_Event event = {0};
+    event.type = MUSIC_NEXT;
+    osMessageQueuePut(music_eventQueueHandle, &event, 0, 0);
+}
+
+// 上一首按钮回调
+static void prev_cb(lv_event_t *e)
+{
+    Music_Event event = {0};
+    event.type = MUSIC_PREV;
+    osMessageQueuePut(music_eventQueueHandle, &event, 0, 0);
+}
+
 // 关闭设置弹窗的回调
 static void close_settings_cb(lv_event_t *e)
 {
@@ -412,6 +428,7 @@ void gui_music_player_open(void)
     lv_obj_set_style_bg_opa(btn_next, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(btn_next, 0, 0);
     lv_obj_set_style_shadow_width(btn_next, 0, 0);
+    lv_obj_add_event_cb(btn_next, next_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *img_next = lv_image_create(btn_next);
     lv_image_set_src(img_next, &next_btn);
@@ -425,6 +442,7 @@ void gui_music_player_open(void)
     lv_obj_set_style_bg_opa(btn_prev, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(btn_prev, 0, 0);
     lv_obj_set_style_shadow_width(btn_prev, 0, 0);
+    lv_obj_add_event_cb(btn_prev, prev_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *img_prev = lv_image_create(btn_prev);
     lv_image_set_src(img_prev, &previous_btn);

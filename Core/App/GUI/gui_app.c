@@ -44,7 +44,6 @@ void gui_app_init(void)
 // 返回主页函数 (供子应用调用)
 void gui_app_return_home(void)
 {
-
     lv_scr_load_anim(scr_home, LV_SCR_LOAD_ANIM_NONE, 0, 0, true);
 }
 

@@ -146,8 +146,8 @@ void ES8388_SetSpeakerEnable(uint8_t enable)
         ES8388_Write_Reg(0x2A, 0x90);  // 路由到ROUT1和ROUT2
         ES8388_Write_Reg(0x28, 0x38);  // LOUT2混音器
         ES8388_Write_Reg(0x29, 0x38);  // ROUT2混音器
-        ES8388_Write_Reg(0x30, 0x1C);  // LOUT2音量
-        ES8388_Write_Reg(0x31, 0x1C);  // ROUT2音量
+        ES8388_Write_Reg(0x30, 0x1a);  // LOUT2音量
+        ES8388_Write_Reg(0x31, 0x1a);  // ROUT2音量
     }
     else
     {

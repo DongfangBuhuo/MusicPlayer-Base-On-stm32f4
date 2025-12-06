@@ -193,6 +193,14 @@ void StartAudioTask(void *argument)
                 case MUSIC_SET_SPEAKER_VOL:
                     music_player_set_speaker_volume(event.param);
                     break;
+                case MUSIC_NEXT:
+                    music_player_set_currentIndex(music_player_get_currentIndex() + 1);
+                    music_player_process_song();
+                    break;
+                case MUSIC_PREV:
+                    music_player_set_currentIndex(music_player_get_currentIndex() - 1);
+                    music_player_process_song();
+                    break;
                 default:
                     break;
             }

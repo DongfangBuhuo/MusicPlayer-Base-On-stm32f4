@@ -28,6 +28,8 @@ extern "C"
         MUSIC_STOP,
         MUSIC_SET_HEADPHONE_VOL,
         MUSIC_SET_SPEAKER_VOL,
+        MUSIC_NEXT,
+        MUSIC_PREV,
     } Music_EventType;
 
     typedef struct
