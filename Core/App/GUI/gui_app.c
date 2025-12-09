@@ -6,6 +6,7 @@
 typedef enum
 {
     APP_ID_MUSIC_PLAYER = 0,
+    APP_ID_CAMERA,
     // APP_ID_SETTINGS, // 预留
     APP_MAX_COUNT
 } app_id_e;
@@ -25,6 +26,7 @@ void createHome(void);  // Not static, as it's called by gui_app_init
 // App 列表
 static const app_t app_list[] = {
     {APP_ID_MUSIC_PLAYER, "Music", &music_player},  // Assuming 'music_player' is an image descriptor
+    {APP_ID_CAMERA,"Camera",&camera_icon},
 };
 
 lv_obj_t *scr_home;
@@ -57,6 +59,9 @@ static void app_item_event_cb(lv_event_t *e)
     {
         case APP_ID_MUSIC_PLAYER:
             gui_music_player_open();
+            break;
+        case APP_ID_CAMERA:
+            gui_camera_open();
             break;
         default:
             break;

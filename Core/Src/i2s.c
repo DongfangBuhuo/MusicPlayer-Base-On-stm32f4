@@ -68,8 +68,42 @@ void HAL_I2S_MspInit(I2S_HandleTypeDef *i2sHandle)
         /** Initializes the peripherals clock
          */
         PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_I2S;
-        PeriphClkInitStruct.PLLI2S.PLLI2SN = 271;
-        PeriphClkInitStruct.PLLI2S.PLLI2SR = 2;
+        /* 根据采样率动态配置 PLLI2S 时钟 (参考正点原子配置, HSE=8MHz) */
+        /* 44.1kHz 系列 */
+        if (i2sHandle->Init.AudioFreq == I2S_AUDIOFREQ_44K || i2sHandle->Init.AudioFreq == I2S_AUDIOFREQ_22K ||
+            i2sHandle->Init.AudioFreq == I2S_AUDIOFREQ_11K)
+        {
+            PeriphClkInitStruct.PLLI2S.PLLI2SN = 271;
+            PeriphClkInitStruct.PLLI2S.PLLI2SR = 2;
+        }
+        /* 48kHz 系列 */
+        else if (i2sHandle->Init.AudioFreq == I2S_AUDIOFREQ_48K || i2sHandle->Init.AudioFreq == I2S_AUDIOFREQ_96K)
+        {
+            // Atom: 258/3 -> 86MHz.
+            // 48k: 86M / (256*7) = 47991Hz
+            PeriphClkInitStruct.PLLI2S.PLLI2SN = 258;
+            PeriphClkInitStruct.PLLI2S.PLLI2SR = 3;
+        }
+        else if (i2sHandle->Init.AudioFreq == I2S_AUDIOFREQ_32K || i2sHandle->Init.AudioFreq == I2S_AUDIOFREQ_16K)
+        {
+            // Atom: 213/2 -> 106.5MHz.
+            // 32k: 106.5M / (256*13) = 32013Hz
+            PeriphClkInitStruct.PLLI2S.PLLI2SN = 213;
+            PeriphClkInitStruct.PLLI2S.PLLI2SR = 2;
+        }
+        else if (i2sHandle->Init.AudioFreq == I2S_AUDIOFREQ_8K)
+        {
+            // Atom: 256/5 -> 51.2MHz.
+            // 8k: 51.2M / (256*25) = 8000Hz
+            PeriphClkInitStruct.PLLI2S.PLLI2SN = 256;
+            PeriphClkInitStruct.PLLI2S.PLLI2SR = 5;
+        }
+        else
+        {
+            // 默认使用 44.1k 配置 (或者是原来的默认)
+            PeriphClkInitStruct.PLLI2S.PLLI2SN = 271;
+            PeriphClkInitStruct.PLLI2S.PLLI2SR = 2;
+        }
         if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
         {
             Error_Handler();

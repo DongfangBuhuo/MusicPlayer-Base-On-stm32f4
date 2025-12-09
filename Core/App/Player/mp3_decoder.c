@@ -83,6 +83,18 @@ MP3_Error MP3_Decoder_DecodeFrame(MP3_DecoderHandle decoder, uint8_t **inBuffer,
         frameInfo->channels = helixInfo.nChans;
         frameInfo->bitsPerSample = helixInfo.bitsPerSample;
         frameInfo->outputSamps = helixInfo.outputSamps;
+
+        // 如果是单声道，转换为立体声
+        if (helixInfo.nChans == 1)
+        {
+            for (int i = helixInfo.outputSamps - 1; i >= 0; i--)
+            {
+                outBuffer[i * 2] = outBuffer[i];      // Left channel
+                outBuffer[i * 2 + 1] = outBuffer[i];  // Right channel
+            }
+            frameInfo->channels = 2;
+            frameInfo->outputSamps *= 2;
+        }
     }
 
     return MP3_OK;

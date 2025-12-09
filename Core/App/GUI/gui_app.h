@@ -10,8 +10,10 @@ extern "C"
 
     // 声明图标资源
     LV_IMG_DECLARE(music_player);
-    // LV_IMG_DECLARE(back_btn); // gui_app.c 不再需要这个，gui_music_player.c 自己声明了
-    LV_IMG_DECLARE(setting_btn);  // 保留您添加的
+    LV_IMG_DECLARE(back_btn); 
+
+    LV_IMG_DECLARE(camera_icon);
+
 
     void createHome(void);
     void gui_app_init(void);

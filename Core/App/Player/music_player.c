@@ -29,14 +29,18 @@ typedef struct
 } WAV_Header_TypeDef;
 
 /* Private define ------------------------------------------------------------*/
-#define AUDIO_BUFFER_SIZE 2048  // 音频缓冲区（平衡 RAM 和性能）
+// 音频缓冲区大小设置为 4608 (2304 stereo samples * 2 bytes = 9216 bytes)
+// 这样做是为了匹配 Helix MP3 解码器一帧的输出大小 (1152 stereo samples * 2 = 2304 samples)
+// 每次半传输中断(2304 samples)刚好对应一帧解码数据，避免数据断流和杂音
+#define AUDIO_BUFFER_SIZE 4608  // +9KB RAM usage (需要减小 FreeRTOS Heap)
 #define MAX_PLAYLIST_SIZE 100
-#define MP3_INBUF_SIZE 2560   // MP3 输入缓冲区大小 (2.5KB)
+#define MP3_INBUF_SIZE 5120   // MP3 输入缓冲区大小 (5KB, 与正点原子 MP3_FILE_BUF_SZ 一致)
 #define MP3_OUTBUF_SIZE 2304  // MP3 输出缓冲区大小 (1152 samples * 2 channels)
 
 /* Private variables ---------------------------------------------------------*/
-// --- Audio Buffer (in SRAM) ---
-static uint16_t audio_buffer[AUDIO_BUFFER_SIZE];
+// --- Audio Buffer (WAV 和 MP3 共用) ---
+// 强制 4 字节对齐，优化 DMA 和解码访问
+static uint16_t audio_buffer[AUDIO_BUFFER_SIZE] __attribute__((aligned(4)));
 
 // --- File System Objects ---
 static FATFS fs;
@@ -45,8 +49,8 @@ static WAV_Header_TypeDef wavHeader;
 
 // --- MP3 Decoder ---
 static MP3_DecoderHandle mp3Decoder = NULL;
-static uint8_t mp3InBuffer[MP3_INBUF_SIZE];
-static int16_t mp3OutBuffer[MP3_OUTBUF_SIZE];
+static uint8_t mp3InBuffer[MP3_INBUF_SIZE] __attribute__((aligned(4)));
+static int16_t mp3OutBuffer[MP3_OUTBUF_SIZE] __attribute__((aligned(4)));
 static int mp3BytesLeft = 0;
 static uint8_t *mp3ReadPtr = NULL;
 static int pcm_offset = 0;     // Offset in mp3OutBuffer for next read (Moved from mp3_fill_buffer)
@@ -101,7 +105,7 @@ void music_player_init(void)
     }
 
     // 设置初始音量 (0-33 范围, 16 约 50%)
-    ES8388_SetSpeakerEnable(0);
+    ES8388_SetSpeakerEnable(1);
     ES8388_SetVolume(16);
 
     // LED闪1次表示ES8388初始化成功
@@ -196,8 +200,9 @@ static int mp3_fill_buffer(int16_t *dst, int num_samples)
         else
         {
             // 2. Decode next frame
-            // Refill input buffer if needed
-            if (mp3BytesLeft < MP3_INBUF_SIZE / 2)
+            // Refill input buffer if needed (参考正点原子: bytesleft < MAINBUF_SIZE * 2)
+            // MAINBUF_SIZE = 1940, so threshold ≈ 3880. We use 2000 for safety.
+            if (mp3BytesLeft < 2000)
             {
                 // Move remaining data to beginning
                 memmove(mp3InBuffer, mp3ReadPtr, mp3BytesLeft);
@@ -220,9 +225,29 @@ static int mp3_fill_buffer(int16_t *dst, int num_samples)
                 pcm_offset = 0;
                 pcm_available = frameInfo.outputSamps;
             }
+            else if (err == MP3_ERR_INDATA_UNDERFLOW || err == MP3_ERR_MAINDATA_UNDERFLOW)
+            {
+                // 数据不足，需要更多数据 - 强制触发 refill
+                // 不跳过数据，只是让下一次迭代读取更多
+                if (mp3BytesLeft > 0)
+                {
+                    memmove(mp3InBuffer, mp3ReadPtr, mp3BytesLeft);
+                    mp3ReadPtr = mp3InBuffer;
+
+                    UINT br;
+                    f_read(&musicFile, mp3InBuffer + mp3BytesLeft, MP3_INBUF_SIZE - mp3BytesLeft, &br);
+                    mp3BytesLeft += br;
+
+                    if (br == 0) return samples_filled;  // EOF
+                }
+                else
+                {
+                    return samples_filled;  // EOF
+                }
+            }
             else
             {
-                // Error: Fast skip garbage using MP3_FindSyncWord
+                // 其他错误: 跳过损坏数据
                 if (mp3BytesLeft > 0)
                 {
                     int offset = MP3_FindSyncWord(mp3ReadPtr + 1, mp3BytesLeft - 1);
@@ -233,7 +258,6 @@ static int mp3_fill_buffer(int16_t *dst, int num_samples)
                     }
                     else
                     {
-                        // No valid data, flush to trigger refill
                         mp3BytesLeft = 0;
                     }
                 }
@@ -268,8 +292,8 @@ static void music_player_process_wav(void)
     hi2s2.Init.AudioFreq = wavHeader.SampleRate;
     HAL_I2S_Init(&hi2s2);
 
-    // Initial fill
-    f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE * 2, &bytesRead);  // Fill in bytes
+    // Initial fill (读取 AUDIO_BUFFER_SIZE * 2 字节 = 填满整个缓冲区)
+    f_read(&musicFile, audio_buffer, AUDIO_BUFFER_SIZE * 2, &bytesRead);
 
     if (HAL_I2S_Transmit_DMA(&hi2s2, audio_buffer, AUDIO_BUFFER_SIZE) != HAL_OK)
     {
@@ -380,45 +404,27 @@ static void music_player_process_mp3(void)
     hi2s2.Init.AudioFreq = frameInfo.sampleRate;
     HAL_I2S_Init(&hi2s2);
 
-    // Fill Audio Buffer (Initial)
-    // We already have some samples in mp3OutBuffer from the first frame decode check
-    // Logic in mp3_fill_buffer presumes pcm_available is set.
-    // We need to set it manually or re-use logic.
-    // simpler: call fill_buffer. We already decoded one frame into mp3OutBuffer. we need to setup state for
-    // fill_buffer. But fill_buffer expects to be called repeatedly. Let's reset state for fill_buffer properly.
-
-    // HACK: We decoded one frame to check format. That data is in mp3OutBuffer.
-    // We need to prime the fill_buffer state variables.
-    // However, static variables in a function are awkward to reset externally.
-    // Better to make them file-scope statics or reset them inside mp3_fill_buffer via a reset flag?
-    // Let's rely on mp3_fill_buffer to do the work, so we shouldn't have decoded manually above without consuming.
-    // Actually, to get SampleRate, we MUST decode.
-    // So let's store that data.
-
-    // Defined inside mp3_fill_buffer:
-    // static int pcm_offset = 0;
-    // static int pcm_available = 0;
-    // I cannot access them. I should move them to file scope.
-    // For now, I will move them to start of file (implied in next step or I'll just redeclare them global static)
-
-    // Actually, let's reopen the file to reset pointer and let fill_buffer do the work from scratch?
-    // No, that's inefficient.
-    // I'll make pcm vars global static.
-
-    // Since I cannot change global definitions easily in this replace block, I will assume I can modify fill_buffer to
-    // use global vars that I will add? Or I'll just implement fill_buffer logic inline or helper that takes context.
-
-    // Let's use the latter approach:
-    // I will call mp3_fill_buffer to fill audio_buffer.
-    // But mp3_fill_buffer needs to know about the frame we just decoded.
-    // I will modify mp3_fill_buffer to be compatible.
-
-    // Actually, I can just not decode in the probe phase? No, I need SampleRate.
-    // I'll restart the file read. It's safer.
+    // 重新定位文件到 ID3 标签之后，重新开始解码
     f_lseek(&musicFile, 0);
     MP3_SkipID3Tag(&musicFile);
+
+    // 重新初始化解码器以清除 bit reservoir 状态
+    if (mp3Decoder)
+    {
+        MP3_Decoder_Free(mp3Decoder);
+    }
+    mp3Decoder = MP3_Decoder_Init();
+    if (!mp3Decoder)
+    {
+        f_close(&musicFile);
+        return;
+    }
+
+    // 重置 MP3 缓冲区状态
     mp3BytesLeft = 0;
     mp3ReadPtr = mp3InBuffer;
+    pcm_offset = 0;
+    pcm_available = 0;
 
     // Pre-fill buffer
     mp3_fill_buffer((int16_t *)audio_buffer, AUDIO_BUFFER_SIZE);
@@ -471,26 +477,30 @@ void music_player_update(void)
         if (audio_state == 1)
         {
             target_buffer = (int16_t *)audio_buffer;
-            audio_state = 0;  // 重置状态
+            audio_state = 0;
         }
         else if (audio_state == 2)
         {
             target_buffer = (int16_t *)&audio_buffer[AUDIO_BUFFER_SIZE / 2];
-            audio_state = 0;  // 重置状态
+            audio_state = 0;
         }
 
         if (target_buffer)
         {
+            // 每次回调填充半个缓冲区 = AUDIO_BUFFER_SIZE / 2 个采样
+            int half_buffer_samples = AUDIO_BUFFER_SIZE / 2;
+
             if (currentFormat == MUSIC_FORMAT_WAV)
             {
-                f_read(&musicFile, target_buffer, AUDIO_BUFFER_SIZE, &bytesRead);
-                if (bytesRead < AUDIO_BUFFER_SIZE) music_player_stop();
+                // WAV: 读取 half_buffer_samples * 2 字节
+                f_read(&musicFile, target_buffer, half_buffer_samples * sizeof(int16_t), &bytesRead);
+                if (bytesRead < half_buffer_samples * sizeof(int16_t)) music_player_stop();
             }
             else
             {
-                // MP3: 填充半个缓冲区
-                int filled = mp3_fill_buffer(target_buffer, AUDIO_BUFFER_SIZE / 2);
-                if (filled < AUDIO_BUFFER_SIZE / 2) music_player_stop();
+                // MP3: 填充半个缓冲区的采样
+                int filled = mp3_fill_buffer(target_buffer, half_buffer_samples);
+                if (filled < half_buffer_samples) music_player_stop();
             }
         }
     }

@@ -68,7 +68,7 @@ extern uint32_t SystemCoreClock;
 #define configTICK_RATE_HZ ((TickType_t)1000)
 #define configMAX_PRIORITIES (56)
 #define configMINIMAL_STACK_SIZE ((uint16_t)128)
-#define configTOTAL_HEAP_SIZE ((size_t)35 * 1024) /* 优化：调整堆大小以避免 RAM 溢出 (48KB->35KB) */
+#define configTOTAL_HEAP_SIZE ((size_t)25 * 1024) /* 优化：调整堆大小以避免 RAM 溢出 (28KB->25KB) */
 #define configMAX_TASK_NAME_LEN (16)
 #define configUSE_TRACE_FACILITY 1
 #define configUSE_16_BIT_TICKS 0

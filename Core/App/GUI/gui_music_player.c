@@ -11,7 +11,6 @@
 // #include "../../Gui/lvgl/src/font/lv_font_source_han_sans_sc_14_cjk.c"
 
 // 声明外部资源
-LV_IMG_DECLARE(back_btn);
 LV_IMG_DECLARE(play_music_btn);
 LV_IMG_DECLARE(pause_btn);
 LV_IMG_DECLARE(next_btn);

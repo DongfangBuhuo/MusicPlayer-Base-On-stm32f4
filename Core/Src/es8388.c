@@ -38,62 +38,54 @@ uint8_t ES8388_Read_Reg(uint8_t reg, uint8_t *data)
 uint8_t ES8388_Init(I2C_HandleTypeDef *hi2c)
 {
     es_i2c = hi2c;
-    uint8_t res = 0;
 
-    /* 1. 复位芯片 */
-    ES8388_Write_Reg(0x00, 0x80);  // 软复位
-    ES8388_Write_Reg(0x00, 0x00);  // 退出复位
+    /* 完全按照正点原子的配置 */
+
+    /* 1. 上电复位序列 (Atom 原版) */
+    ES8388_Write_Reg(0x01, 0x58);
+    ES8388_Write_Reg(0x01, 0x50);
+    ES8388_Write_Reg(0x02, 0xF3);
+    ES8388_Write_Reg(0x02, 0xF0);
+
+    /* 2. 基本配置 */
+    ES8388_Write_Reg(0x03, 0x09); /* 麦克风偏置电源关闭 */
+    ES8388_Write_Reg(0x00, 0x06); /* 使能参考 500K驱动使能 */
+    ES8388_Write_Reg(0x04, 0x00); /* DAC电源管理，不打开任何通道 */
+    ES8388_Write_Reg(0x08, 0x00); /* MCLK不分频 */
+    ES8388_Write_Reg(0x2B, 0x80); /* DAC控制 DACLRC与ADCLRC相同 */
+
+    /* 3. ADC 配置 */
+    ES8388_Write_Reg(0x09, 0x88); /* ADC L/R PGA增益配置为+24dB */
+    ES8388_Write_Reg(0x0C, 0x4C); /* ADC 数据选择为left data = left ADC, right data = left ADC 音频数据为16bit */
+    ES8388_Write_Reg(0x0D, 0x02); /* ADC配置 MCLK/采样率=256 */
+    ES8388_Write_Reg(0x10, 0x00); /* ADC数字音量控制将信号衰减 L 设置为最小 */
+    ES8388_Write_Reg(0x11, 0x00); /* ADC数字音量控制将信号衰减 R 设置为最小 */
+
+    /* 4. DAC 配置 (关键！) */
+    ES8388_Write_Reg(0x17, 0x18); /* DAC 音频数据为16bit I2S */
+    ES8388_Write_Reg(0x18, 0x02); /* DAC 配置 MCLK/采样率=256 */
+    ES8388_Write_Reg(0x1A, 0x00); /* DAC数字音量控制将信号衰减 L 设置为最小 */
+    ES8388_Write_Reg(0x1B, 0x00); /* DAC数字音量控制将信号衰减 R 设置为最小 */
+
+    /* 5. 混音器配置 (关键！与原来不同) */
+    ES8388_Write_Reg(0x27, 0xB8); /* L混频器 - 使用 Atom 的值 0xB8 */
+    ES8388_Write_Reg(0x2A, 0xB8); /* R混频器 - 使用 Atom 的值 0xB8 */
+
+    /* 6. 启用 DAC (正点原子: es8388_adda_cfg(1, 0)) */
+    ES8388_Write_Reg(0x02, 0x00); /* 0x00 启用 DAC，禁用 ADC */
+
+    /* 7. 启用输出通道 (正点原子: es8388_output_cfg(1, 1)) */
+    ES8388_Write_Reg(0x04, 0x3C); /* 启用所有输出通道 (LOUT1/ROUT1/LOUT2/ROUT2) */
+
+    /* 8. 设置默认输出音量 */
+    ES8388_Write_Reg(0x2E, 0x1E); /* LOUT1 音量 */
+    ES8388_Write_Reg(0x2F, 0x1E); /* ROUT1 音量 */
+    ES8388_Write_Reg(0x30, 0x1E); /* LOUT2 音量 */
+    ES8388_Write_Reg(0x31, 0x1E); /* ROUT2 音量 */
+
     HAL_Delay(100);
 
-    /* 2. 电源管理配置 */
-    ES8388_Write_Reg(0x01, 0x58);  // 禁用所有电源,准备配置
-    ES8388_Write_Reg(0x02, 0xF0);  // 关闭ADC电源,只使用DAC
-    ES8388_Write_Reg(0x03, 0x00);  // 关闭所有输出,包括喇叭功放
-
-    /* 3. 使能参考和DAC电源 */
-    ES8388_Write_Reg(0x00, 0x06);  // 使能参考,500K驱动
-    ES8388_Write_Reg(0x01, 0x50);  // 使能VMID,VREF
-    ES8388_Write_Reg(0x03, 0x00);  // 关闭所有ADC相关电源
-
-    /* 3.1 额外确保喇叭功放关闭 */
-    ES8388_Write_Reg(0x38, 0x00);  // 关闭左喇叭功放
-    ES8388_Write_Reg(0x39, 0x00);  // 关闭右喇叭功放
-
-    /* 4. 时钟配置 */
-    ES8388_Write_Reg(0x08, 0x00);  // MCLK不分频,主模式
-
-    /* 5. DAC接口配置 (I2S格式,16位,44.1kHz) */
-    ES8388_Write_Reg(0x17, 0x18);  // DAC I2S格式,16位
-    ES8388_Write_Reg(0x18, 0x02);  // MCLK/LRCK = 256 (44.1kHz)
-    ES8388_Write_Reg(0x2B, 0x80);  // DACLRC与ADCLRC相同
-
-    /* 6. DAC数字音量 (0x00 = 0dB,不衰减) */
-    ES8388_Write_Reg(0x1A, 0x00);  // Left DAC数字音量 0dB
-    ES8388_Write_Reg(0x1B, 0x00);  // Right DAC数字音量 0dB
-
-    /* 7. DAC控制 */
-    ES8388_Write_Reg(0x19, 0x00);  // 取消静音,正常工作
-
-    /* 8. 混音器配置 - 只输出到耳机 */
-    ES8388_Write_Reg(0x26, 0x00);  // Left DAC to Left Mixer
-    ES8388_Write_Reg(0x27, 0x80);  // 只启用到LOUT1的路径
-    ES8388_Write_Reg(0x28, 0x00);  // 关闭LOUT2混音器
-    ES8388_Write_Reg(0x29, 0x00);  // 关闭ROUT2混音器
-    ES8388_Write_Reg(0x2A, 0x80);  // 只启用到ROUT1的路径
-
-    /* 9. 输出音量设置 */
-    ES8388_Write_Reg(0x2E, 0x00);  // LOUT1音量 (左耳机) 30/33 ≈ 90%
-    ES8388_Write_Reg(0x2F, 0x00);  // ROUT1音量 (右耳机) 30/33 ≈ 90%
-    ES8388_Write_Reg(0x30, 0x00);  // LOUT2音量设为0 (左喇叭静音)
-    ES8388_Write_Reg(0x31, 0x00);  // ROUT2音量设为0 (右喇叭静音)
-
-    ES8388_Write_Reg(0x04, 0x3C);  // 只使能LOUT1/ROUT1 (耳机),禁用LOUT2/ROUT2 (喇叭)
-    /* 10. 启动DAC */
-    ES8388_Write_Reg(0x02, 0x00);  // 启动DAC电源
-
-    HAL_Delay(50);  // 等待稳定
-
-    return res;
+    return 0;
 }
 
 /**
@@ -170,8 +162,8 @@ void ES8388_SetSpeakerEnable(uint8_t enable)
         ES8388_Write_Reg(0x2A, 0x90);  // 路由到ROUT1和ROUT2
         ES8388_Write_Reg(0x28, 0x38);  // LOUT2混音器
         ES8388_Write_Reg(0x29, 0x38);  // ROUT2混音器
-        ES8388_Write_Reg(0x30, 0x1a);  // LOUT2音量
-        ES8388_Write_Reg(0x31, 0x1a);  // ROUT2音量
+        ES8388_Write_Reg(0x30, 0x10);  // LOUT2音量
+        ES8388_Write_Reg(0x31, 0x10	);  // ROUT2音量
     }
     else
     {
